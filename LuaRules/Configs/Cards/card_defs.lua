@@ -1,0 +1,186 @@
+local constants = VFS.Include("LuaRules/Configs/Cards/card_constants.lua")
+local CATEGORY = constants.CATEGORY
+
+local defs = {
+	{
+		id = 101,
+		name = "Clockwork Treaty",
+		shortDescription = "A harmless procedural card with no gameplay effect yet.",
+		description = "Nothing changes except that your side will forever claim it picked the sensible option.",
+		category = CATEGORY.NEUTRAL,
+		image = "LuaUI/Images/commands/Bold/wait.png",
+		effectType = "record_only",
+	},
+	{
+		id = 102,
+		name = "Fog Ledger",
+		shortDescription = "Records the battlefield without changing balance.",
+		description = "A neutral pact to catalog the battlefield without granting any real advantage yet.",
+		category = CATEGORY.NEUTRAL,
+		image = "LuaUI/Images/commands/Bold/guard.png",
+		effectType = "record_only",
+	},
+	{
+		id = 103,
+		name = "Static Accord",
+		shortDescription = "A neutral placeholder that only exercises permanence.",
+		description = "An even-handed card that exists to exercise the permanent-card pipeline.",
+		category = CATEGORY.NEUTRAL,
+		image = "LuaUI/Images/commands/Bold/repair.png",
+		effectType = "record_only",
+	},
+	{
+		id = 104,
+		name = "Map Room",
+		shortDescription = "A neutral strategy session with no live effect yet.",
+		description = "A neutral strategy session. The effect is a placeholder, the state persistence is real.",
+		category = CATEGORY.NEUTRAL,
+		image = "LuaUI/Images/commands/Bold/areaattack.png",
+		effectType = "record_only",
+	},
+	{
+		id = 105,
+		name = "Signal Relay",
+		shortDescription = "Extra neutral draft variety with no gameplay payload yet.",
+		description = "Another neutral test card for draft variety and repeat filtering.",
+		category = CATEGORY.NEUTRAL,
+		image = "LuaUI/Images/commands/Bold/repeat.png",
+		effectType = "record_only",
+	},
+	{
+		id = 106,
+		name = "Paper Shield",
+		shortDescription = "Looks defensive, currently does nothing except persist.",
+		description = "A harmless neutral placeholder dressed up like a real tactical choice.",
+		category = CATEGORY.NEUTRAL,
+		image = "LuaUI/Images/commands/Bold/retreat.png",
+		effectType = "record_only",
+	},
+	{
+		id = 201,
+		name = "Golden Circuit",
+		shortDescription = "A future buff slot, currently record-only.",
+		description = "A beneficial card slot reserved for future real buffs; v1 only records the pick.",
+		category = CATEGORY.GOOD,
+		image = "LuaUI/Images/commands/Bold/attack.png",
+		effectType = "record_only",
+	},
+	{
+		id = 202,
+		name = "Warm Start",
+		shortDescription = "A positive placeholder for category and history testing.",
+		description = "A good card placeholder used to verify category-wide randomness and UI styling.",
+		category = CATEGORY.GOOD,
+		image = "LuaUI/Images/commands/Bold/repeat.png",
+		effectType = "record_only",
+	},
+	{
+		id = 203,
+		name = "Bright Reserve",
+		shortDescription = "A beneficial card shell with no stat change yet.",
+		description = "The card says upside; the implementation currently says bookkeeping only.",
+		category = CATEGORY.GOOD,
+		image = "LuaUI/Images/energyplus.png",
+		effectType = "record_only",
+	},
+	{
+		id = 204,
+		name = "Free Initiative",
+		shortDescription = "A good-card placeholder for early draft flow testing.",
+		description = "A positive placeholder card for early testing of draft history and reopen UI.",
+		category = CATEGORY.GOOD,
+		image = "LuaUI/Images/metalplus.png",
+		effectType = "record_only",
+	},
+	{
+		id = 205,
+		name = "Reinforced Frames",
+		shortDescription = "+5% max HP to completed allied units every minute.",
+		description = "Once picked, every 60 seconds all currently fully constructed units on your side gain another additive 5% max HP bonus. Units do not receive missed past ticks retroactively.",
+		category = CATEGORY.GOOD,
+		image = "LuaUI/Images/commands/Bold/drop_beacon.png",
+		effectType = "team_hp_growth",
+	},
+	{
+		id = 206,
+		name = "Lucky Cache",
+		shortDescription = "A simple positive placeholder to round out the pool.",
+		description = "A simple beneficial placeholder included to keep the category pool healthy.",
+		category = CATEGORY.GOOD,
+		image = "LuaUI/Images/commands/Bold/ferry.png",
+		effectType = "record_only",
+	},
+	{
+		id = 301,
+		name = "Rust Tax",
+		shortDescription = "A future penalty slot, currently harmless.",
+		description = "A detrimental card placeholder. It does not hurt yet, but the permanent pick is tracked.",
+		category = CATEGORY.BAD,
+		image = "LuaUI/Images/commands/Bold/stop.png",
+		effectType = "record_only",
+	},
+	{
+		id = 302,
+		name = "Short Fuse",
+		shortDescription = "A negative placeholder using the same permanent-card pipeline.",
+		description = "A bad-card shell used to prove that harmful categories use the same plumbing.",
+		category = CATEGORY.BAD,
+		image = "LuaUI/Images/commands/Bold/retreat.png",
+		effectType = "record_only",
+	},
+	{
+		id = 303,
+		name = "Heavy Air",
+		shortDescription = "A bad-card shell with no live penalty yet.",
+		description = "A negative placeholder with no stat effect yet and full draft-system visibility.",
+		category = CATEGORY.BAD,
+		image = "LuaUI/Images/commands/Bold/move.png",
+		effectType = "record_only",
+	},
+	{
+		id = 304,
+		name = "Brittle Lines",
+		shortDescription = "A fake downside card for offer-history testing.",
+		description = "A fake downside card for UI and repeat-filter testing.",
+		category = CATEGORY.BAD,
+		image = "LuaUI/Images/commands/Bold/patrol.png",
+		effectType = "record_only",
+	},
+	{
+		id = 305,
+		name = "Cold Start",
+		shortDescription = "A reserved penalty card that currently just persists.",
+		description = "A detrimental placeholder card that keeps the bad pool deep enough for long matches.",
+		category = CATEGORY.BAD,
+		image = "LuaUI/Images/commands/Bold/guard.png",
+		effectType = "record_only",
+	},
+	{
+		id = 306,
+		name = "Lost Tempo",
+		shortDescription = "A negative placeholder reserved for future permanent penalties.",
+		description = "A bad-card placeholder reserved for future permanent penalties.",
+		category = CATEGORY.BAD,
+		image = "LuaUI/Images/commands/Bold/wait.png",
+		effectType = "record_only",
+	},
+}
+
+local byID = {}
+local idsByCategory = {
+	[CATEGORY.NEUTRAL] = {},
+	[CATEGORY.GOOD] = {},
+	[CATEGORY.BAD] = {},
+}
+
+for i = 1, #defs do
+	local def = defs[i]
+	byID[def.id] = def
+	idsByCategory[def.category][#idsByCategory[def.category] + 1] = def.id
+end
+
+return {
+	defs = defs,
+	byID = byID,
+	idsByCategory = idsByCategory,
+}
