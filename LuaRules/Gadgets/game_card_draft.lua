@@ -27,6 +27,7 @@ local spGetPlayerInfo = Spring.GetPlayerInfo
 local spGetPlayerList = Spring.GetPlayerList
 local spGetTeamInfo = Spring.GetTeamInfo
 local spGetTeamList = Spring.GetTeamList
+local spIsCheatingEnabled = Spring.IsCheatingEnabled
 local spGetPlayerRulesParam = Spring.GetPlayerRulesParam
 local spSetGameRulesParam = Spring.SetGameRulesParam
 local spSetPlayerRulesParam = Spring.SetPlayerRulesParam
@@ -237,6 +238,44 @@ local function ApplyCardToAllyTeam(allyTeamID, cardID)
 	return true
 end
 
+local function EnsureAppliedState(allyTeamID)
+	if appliedByAllyTeam[allyTeamID] then
+		return true
+	end
+	if allyTeamID == gaiaAllyTeam then
+		return false
+	end
+
+	appliedByAllyTeam[allyTeamID] = {
+		countByCardID = {},
+		history = {},
+	}
+	PublishAppliedHistory(allyTeamID)
+	return true
+end
+
+local function TryGrantCard(playerID, targetAllyTeamID, cardID)
+	if not spIsCheatingEnabled() then
+		return false
+	end
+
+	local _, active = spGetPlayerInfo(playerID, false)
+	if not active then
+		return false
+	end
+
+	targetAllyTeamID = tonumber(targetAllyTeamID)
+	cardID = tonumber(cardID)
+	if not (targetAllyTeamID and cardID and cardData.byID[cardID]) then
+		return false
+	end
+	if not EnsureAppliedState(targetAllyTeamID) then
+		return false
+	end
+
+	return ApplyCardToAllyTeam(targetAllyTeamID, cardID)
+end
+
 local function ResolveDraftForAllyTeam(allyTeamID, forcedSlot)
 	local draft = stage.drafts[allyTeamID]
 	if not draft or draft.resolved then
@@ -349,7 +388,17 @@ local function OpenNewStage(frame)
 end
 
 function gadget:RecvLuaMsg(message, playerID)
-	if not (message and stage.active) then
+	if not message then
+		return
+	end
+
+	local targetAllyTeamText, grantCardText = message:match("^" .. PREFIX .. ":grant:(%-?%d+):(%d+)$")
+	if targetAllyTeamText then
+		TryGrantCard(playerID, targetAllyTeamText, grantCardText)
+		return
+	end
+
+	if not stage.active then
 		return
 	end
 

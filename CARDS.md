@@ -10,8 +10,6 @@ Applies 5% max HP bonus (Additive) per minute to each unit on the team.
 Associated gadget: `LuaRules/Gadgets/card_team_hp_growth.lua`
 Category: Good
 
-## Incomplete
-
 ### Meteor Shower
 
 Meteors occasionally drop in an area around your buildings and units.
@@ -71,6 +69,8 @@ Category: Good
 Team energy will begin to vary over time, from 20% efficiency to 120% efficiency.
 Category: Bad
 
+## Incomplete
+
 ### Builders
 
 Constructors produce metal at a rate of 0.4 metal/sec and consume energy at a rate of 1 energy/sec. Metal extractors no longer produce metal.
@@ -90,9 +90,9 @@ Category: Neutral
 
 ### Bounties
 
-Every 10 minutes, a random built, high-value building or unit is picked and all other players have permanent line of sight in a radius of it.
+Every 5 minutes whilst there is no active bounty on your team, a random built, high-value building or unit from your team is picked and all other players have permanent line of sight in a radius of it.
 An announcement is made: if <player>'s <unit name> is destroyed, everyone gets an economy bonus.
-If that unit is destroyed, all other teams gain a 30% economy boost for 5 minutes while you get a 50% economy pentalty for 5 minutes.
+If that unit is destroyed, all other teams gain a 30% economy boost for 5 minutes while you get a 50% economy pentalty for 3 minutes.
 Category: Bad
 
 ### Salvage Rights

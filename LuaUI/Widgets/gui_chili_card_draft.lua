@@ -23,6 +23,10 @@ local TextBox
 local Image
 local screen0
 
+local WINDOW_WIDTH = 1140
+local WINDOW_HEIGHT_EXPANDED = 520
+local WINDOW_HEIGHT_COLLAPSED = 86
+
 local window
 local headerLabel
 local timerLabel
@@ -30,9 +34,12 @@ local subtitleLabel
 local historyLabel
 local emptyHistoryLabel
 local globalButton
+local collapseButton
+local historyPanel
 
 local cardControls = {}
 local visibleStageSeq
+local isCollapsed = false
 
 local function IsSpectator()
 	return Spring.GetSpectatingState()
@@ -82,6 +89,32 @@ local function HideWindow()
 	visibleStageSeq = nil
 end
 
+local function UpdateCollapseState()
+	if not window then
+		return
+	end
+
+	window.height = isCollapsed and WINDOW_HEIGHT_COLLAPSED or WINDOW_HEIGHT_EXPANDED
+	subtitleLabel:SetVisibility(not isCollapsed)
+	historyPanel:SetVisibility(not isCollapsed)
+	for i = 1, #cardControls do
+		cardControls[i].button:SetVisibility(not isCollapsed)
+	end
+	if collapseButton then
+		collapseButton:SetCaption(isCollapsed and "+" or "-")
+	end
+	window:Invalidate()
+	CenterWindow()
+end
+
+local function SetCollapsed(collapsed)
+	if isCollapsed == collapsed then
+		return
+	end
+	isCollapsed = collapsed and true or false
+	UpdateCollapseState()
+end
+
 local function FormatSeconds(frameDelta)
 	local seconds = math.max(0, math.ceil(frameDelta / constants.GAME_SPEED))
 	local minutesPart = math.floor(seconds / 60)
@@ -91,6 +124,7 @@ end
 
 local function SendVote(slot, stageSeq)
 	Spring.SendLuaRulesMsg(string.format("%s:vote:%d:%d", PREFIX, stageSeq, slot))
+	SetCollapsed(true)
 end
 
 local function UpdateCardButton(cardControl, cardID, slot, stageSeq, voteCount, selectedSlot)
@@ -210,8 +244,8 @@ local function InitializeWindow()
 
 	window = Window:New{
 		name = "zk_card_draft_window",
-		width = 1140,
-		height = 520,
+		width = WINDOW_WIDTH,
+		height = WINDOW_HEIGHT_EXPANDED,
 		parent = screen0,
 		dockable = false,
 		draggable = false,
@@ -225,7 +259,7 @@ local function InitializeWindow()
 	headerLabel = Label:New{
 		x = 16,
 		y = 12,
-		right = 200,
+		right = 248,
 		height = 26,
 		fontsize = 22,
 		caption = "Card Draft",
@@ -233,7 +267,7 @@ local function InitializeWindow()
 	}
 
 	timerLabel = Label:New{
-		right = 16,
+		right = 56,
 		y = 12,
 		width = 180,
 		height = 26,
@@ -241,6 +275,20 @@ local function InitializeWindow()
 		fontsize = 22,
 		caption = "0:00",
 		parent = window,
+	}
+
+	collapseButton = Button:New{
+		right = 16,
+		y = 10,
+		width = 28,
+		height = 28,
+		caption = "-",
+		parent = window,
+		OnClick = {
+			function()
+				SetCollapsed(not isCollapsed)
+			end,
+		},
 	}
 
 	subtitleLabel = TextBox:New{
@@ -253,7 +301,7 @@ local function InitializeWindow()
 		parent = window,
 	}
 
-	local historyPanel = Panel:New{
+	historyPanel = Panel:New{
 		right = 16,
 		y = 88,
 		width = 180,
@@ -302,6 +350,7 @@ local function InitializeWindow()
 			CenterWindow()
 		end
 	}
+	UpdateCollapseState()
 	CenterWindow()
 end
 
@@ -353,10 +402,13 @@ local function RefreshUI(forceOpen)
 		UpdateCardButton(cardControls[slot], cardID, slot, stageSeq, voteCount, selectedSlot)
 	end
 
+	UpdateCollapseState()
+
 	UpdateHistory(teamID)
 	if forceOpen or visibleStageSeq ~= stageSeq then
 		window:SetVisibility(true)
 		window:BringToFront()
+		SetCollapsed(false)
 		visibleStageSeq = stageSeq
 	else
 		window:SetVisibility(window.visible)
