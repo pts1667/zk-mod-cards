@@ -14,7 +14,6 @@ end
 
 local CARD_ID = 103
 local SINGU_DEF_ID = UnitDefNames.energysingu and UnitDefNames.energysingu.id
-local EFFECT_KEY_PREFIX = "zk_cards_energy_overload_"
 local UPDATE_FRAMES = 15
 local RAMP_FRAMES = 20 * 60 * Game.gameSpeed
 local MIN_DECAY_PER_SECOND = 0.025
@@ -30,9 +29,9 @@ local spGetTeamList = Spring.GetTeamList
 local spGetTeamUnits = Spring.GetTeamUnits
 local spGetUnitDefID = Spring.GetUnitDefID
 local spGetUnitHealth = Spring.GetUnitHealth
-local spGetUnitPosition = Spring.GetUnitPosition
+local spGetUnitAllyTeam = Spring.GetUnitAllyTeam
 local spGetUnitTeam = Spring.GetUnitTeam
-local spSetUnitHealth = Spring.SetUnitHealth
+local spAddUnitDamage = Spring.AddUnitDamage
 
 local allyTeamActive = {}
 local trackedSingus = {}
@@ -42,8 +41,37 @@ local function Lerp(a, b, t)
 	return a + (b - a) * t
 end
 
-local function GetEffectKey(unitID)
-	return EFFECT_KEY_PREFIX .. unitID
+local function GetBaseIncomeMultiplier(allyTeamID)
+	if GG.allyTeamIncomeMult then
+		return GG.allyTeamIncomeMult[allyTeamID] or 1
+	end
+	return 1
+end
+
+local function ApplyIncomeMultiplier(unitID, allyTeamID, energyMult)
+	if not (GG.unit_handicap and GG.UpdateUnitAttributes) then
+		return
+	end
+
+	local handicap = energyMult * GetBaseIncomeMultiplier(allyTeamID)
+	if GG.unit_handicap[unitID] ~= handicap then
+		GG.unit_handicap[unitID] = handicap
+		GG.UpdateUnitAttributes(unitID)
+	end
+end
+
+local function RestoreIncomeMultiplier(unitID, allyTeamID)
+	if not (GG.unit_handicap and GG.UpdateUnitAttributes) then
+		return
+	end
+
+	local baseMult = GetBaseIncomeMultiplier(allyTeamID)
+	if baseMult == 1 then
+		GG.unit_handicap[unitID] = nil
+	else
+		GG.unit_handicap[unitID] = baseMult
+	end
+	GG.UpdateUnitAttributes(unitID)
 end
 
 local function IsEligibleSingu(unitDefID)
@@ -53,18 +81,13 @@ end
 local function UpdateSinguEffect(unitID, frame, data)
 	local ageFactor = math.min(1, math.max(0, (frame - data.startFrame) / RAMP_FRAMES))
 	local energyMult = Lerp(MIN_ENERGY_MULT, MAX_ENERGY_MULT, ageFactor)
-	if GG.Attributes then
-		GG.Attributes.AddEffect(unitID, GetEffectKey(unitID), {
-			energy = energyMult,
-			static = true,
-		})
-	end
+	ApplyIncomeMultiplier(unitID, data.allyTeamID, energyMult)
 
 	local health, maxHealth = spGetUnitHealth(unitID)
 	if health and maxHealth and maxHealth > 0 then
 		local decayPerSecond = Lerp(MIN_DECAY_PER_SECOND, MAX_DECAY_PER_SECOND, ageFactor)
 		local decayAmount = maxHealth * decayPerSecond * (UPDATE_FRAMES / Game.gameSpeed)
-		spSetUnitHealth(unitID, math.max(0, health - decayAmount))
+		spAddUnitDamage(unitID, decayAmount, 0, nil, -7)
 	end
 end
 
@@ -87,14 +110,15 @@ local function TrackSingu(unitID, teamID)
 	trackedSingus[unitID].allyTeamID = allyTeamID
 	trackedSingus[unitID].teamID = teamID
 
-	if not allyTeamActive[allyTeamID] and GG.Attributes then
-		GG.Attributes.RemoveEffect(unitID, GetEffectKey(unitID))
+	if not allyTeamActive[allyTeamID] then
+		RestoreIncomeMultiplier(unitID, allyTeamID)
 	end
 end
 
 local function UntrackSingu(unitID)
-	if GG.Attributes then
-		GG.Attributes.RemoveEffect(unitID, GetEffectKey(unitID))
+	local allyTeamID = trackedSingus[unitID] and trackedSingus[unitID].allyTeamID or spGetUnitAllyTeam(unitID)
+	if allyTeamID ~= nil then
+		RestoreIncomeMultiplier(unitID, allyTeamID)
 	end
 	trackedSingus[unitID] = nil
 end
@@ -159,8 +183,8 @@ function gadget:GameFrame(frame)
 			data.allyTeamID = select(6, spGetTeamInfo(teamID, false))
 			if allyTeamActive[data.allyTeamID] then
 				UpdateSinguEffect(unitID, frame, data)
-			elseif GG.Attributes then
-				GG.Attributes.RemoveEffect(unitID, GetEffectKey(unitID))
+			else
+				RestoreIncomeMultiplier(unitID, data.allyTeamID)
 			end
 		end
 	end

@@ -25,7 +25,6 @@ local screen0
 
 local WINDOW_WIDTH = 1140
 local WINDOW_HEIGHT_EXPANDED = 520
-local WINDOW_HEIGHT_COLLAPSED = 86
 
 local window
 local headerLabel
@@ -39,7 +38,8 @@ local historyPanel
 
 local cardControls = {}
 local visibleStageSeq
-local isCollapsed = false
+local isMinimized = false
+local CenterWindow
 
 local function IsSpectator()
 	return Spring.GetSpectatingState()
@@ -61,8 +61,12 @@ local function EnsureGlobalButton()
 		"LuaUI/Images/metalplus.png",
 		"Toggle the active card draft window",
 		function()
+			isMinimized = not isMinimized
 			if window then
-				window:SetVisibility(not window.visible)
+				window:SetVisibility(not isMinimized)
+				if window.visible then
+					window:BringToFront()
+				end
 			end
 		end
 	)
@@ -89,30 +93,15 @@ local function HideWindow()
 	visibleStageSeq = nil
 end
 
-local function UpdateCollapseState()
+local function UpdateMinimizedState()
 	if not window then
 		return
 	end
 
-	window.height = isCollapsed and WINDOW_HEIGHT_COLLAPSED or WINDOW_HEIGHT_EXPANDED
-	subtitleLabel:SetVisibility(not isCollapsed)
-	historyPanel:SetVisibility(not isCollapsed)
-	for i = 1, #cardControls do
-		cardControls[i].button:SetVisibility(not isCollapsed)
-	end
 	if collapseButton then
-		collapseButton:SetCaption(isCollapsed and "+" or "-")
+		collapseButton:SetCaption(isMinimized and "+" or "-")
 	end
-	window:Invalidate()
-	CenterWindow()
-end
-
-local function SetCollapsed(collapsed)
-	if isCollapsed == collapsed then
-		return
-	end
-	isCollapsed = collapsed and true or false
-	UpdateCollapseState()
+	window:SetVisibility(not isMinimized)
 end
 
 local function FormatSeconds(frameDelta)
@@ -124,7 +113,8 @@ end
 
 local function SendVote(slot, stageSeq)
 	Spring.SendLuaRulesMsg(string.format("%s:vote:%d:%d", PREFIX, stageSeq, slot))
-	SetCollapsed(true)
+	isMinimized = true
+	UpdateMinimizedState()
 end
 
 local function UpdateCardButton(cardControl, cardID, slot, stageSeq, voteCount, selectedSlot)
@@ -171,7 +161,7 @@ local function UpdateHistory(teamID)
 	emptyHistoryLabel:SetCaption("")
 end
 
-local function CenterWindow()
+function CenterWindow()
 	if not (window and screen0) then
 		return
 	end
@@ -286,7 +276,11 @@ local function InitializeWindow()
 		parent = window,
 		OnClick = {
 			function()
-				SetCollapsed(not isCollapsed)
+				isMinimized = not isMinimized
+				UpdateMinimizedState()
+				if window and window.visible then
+					window:BringToFront()
+				end
 			end,
 		},
 	}
@@ -350,7 +344,7 @@ local function InitializeWindow()
 			CenterWindow()
 		end
 	}
-	UpdateCollapseState()
+	UpdateMinimizedState()
 	CenterWindow()
 end
 
@@ -402,16 +396,14 @@ local function RefreshUI(forceOpen)
 		UpdateCardButton(cardControls[slot], cardID, slot, stageSeq, voteCount, selectedSlot)
 	end
 
-	UpdateCollapseState()
-
 	UpdateHistory(teamID)
 	if forceOpen or visibleStageSeq ~= stageSeq then
-		window:SetVisibility(true)
+		isMinimized = false
+		UpdateMinimizedState()
 		window:BringToFront()
-		SetCollapsed(false)
 		visibleStageSeq = stageSeq
 	else
-		window:SetVisibility(window.visible)
+		UpdateMinimizedState()
 	end
 end
 

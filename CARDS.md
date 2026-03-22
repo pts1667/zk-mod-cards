@@ -69,23 +69,24 @@ Category: Good
 Team energy will begin to vary over time, from 20% efficiency to 120% efficiency.
 Category: Bad
 
-## Incomplete
-
 ### Builders
 
 Constructors produce metal at a rate of 0.4 metal/sec and consume energy at a rate of 1 energy/sec. Metal extractors no longer produce metal.
 Factories can only build constructors. No other mobile units may be built.
+Associated gadget: `LuaRules/Gadgets/card_builders.lua`
 Category: Neutral
 
 ### Nuclear Wildcard
 
 Trinity will be stockpiled for free and takes only 30 seconds to stockpile.
 The target position when launched is completely random.
+Associated gadget: `LuaRules/Gadgets/card_nuclear_wildcard.lua`
 Category: Neutral
 
 ### Strider Party
 
 Striders, when built, have 20% Max HP and 40% size, but can be built at 40% of the cost.
+Associated gadget: `LuaRules/Gadgets/card_strider_party.lua`
 Category: Neutral
 
 ### Bounties
@@ -93,16 +94,20 @@ Category: Neutral
 Every 5 minutes whilst there is no active bounty on your team, a random built, high-value building or unit from your team is picked and all other players have permanent line of sight in a radius of it.
 An announcement is made: if <player>'s <unit name> is destroyed, everyone gets an economy bonus.
 If that unit is destroyed, all other teams gain a 30% economy boost for 5 minutes while you get a 50% economy pentalty for 3 minutes.
+Associated gadget: `LuaRules/Gadgets/card_bounties.lua`
 Category: Bad
 
 ### Salvage Rights
 
 All wrecks on the map contain 50% more metal. If multiple teams pick this, apply additively.
+Associated gadget: `LuaRules/Gadgets/card_salvage_rights.lua`
 Category: Neutral
+
+## Incomplete
 
 ### Rapid Deployment
 
-Factories build units 100% faster, but all newly finished mobile units start with a 20 second disarm.
+Factories and factory plates build units 200% faster, but all newly finished mobile units start with a 20 second disarm.
 Category: Neutral
 
 ### Frontier Economy
@@ -123,17 +128,12 @@ Category: Good
 
 ### Hardened Logistics
 
-Constructors and factories take 20% less damage, and nanospray repair rate is increased.
-Category: Good
-
-### Adaptive Plating
-
-Each unit gains a small permanent damage resistance bonus after surviving for several minutes, capped at a reasonable limit.
+Static units have 50% bonus max HP and repair twice as fast.
 Category: Good
 
 ### Field Repairs
 
-Idle mobile units slowly regenerate health after being out of combat for a short period.
+All idle mobile units slowly regenerate health after being out of combat (i.e. not attacked) for a short period.
 Category: Good
 
 ### Deep Magazines
@@ -165,3 +165,45 @@ Category: Bad
 
 Weapons apply knockback (impulse damage in the opposite direction) proportional to the damage that weapon applies.
 Category: Bad
+
+### Mega Lobster
+
+Lobsters have 500% bonus HP, 100% bonus size and 100% bonus range. Additionally, they can throw buildings.
+Category: Good
+
+### Sleep
+
+Your units grow tired and must sleep. Units must sleep for 30 seconds once every 5 minutes.
+During sleep, they can't do anything (but regenerate at 2 max HP/second).
+Should be implemented in a similar way to EMP/Slow/Disarm, with its own effect and status bar.
+Category: Bad
+
+### Pre-Charged Shields
+
+Shields can't recharge; however, they gain 10x their charge capacity when built.
+Category: Neutral
+
+### Lead the Charge
+
+If you have at least 5 of a mobile unit, one of those mobile units (selected at random) is assigned as a Leader.
+Leaders gain +200% Max HP, +50% size, +100% attack range and +100% attack speed. 
+Additionally, all units of the same type within attack range gain a smaller bonus (+40% attack range and speed, no max HP bonus).
+If the Leader dies all units of that type on the same team in attack range also die. In this case, a new leader is selected when there are again at least 5 units of that type.
+Leaders should have a color tint/glow which can be implemented similar to the EMP/Slow/Disarm effects.
+Category: Good
+
+### Be Careful
+
+If all commanders on your team are dead, all units on your team also die.
+Category: Bad
+
+### Monopoly
+
+If your team has the highest metal income, gain 50% bonus metal income.
+Measured by average metal income over the last 3 minutes.
+Category: Good
+
+### Air Dominance
+
+Air units move at only 20% move speed, but rearm in the air and have +500% Max HP
+Category: Good
