@@ -103,43 +103,50 @@ All wrecks on the map contain 50% more metal. If multiple teams pick this, apply
 Associated gadget: `LuaRules/Gadgets/card_salvage_rights.lua`
 Category: Neutral
 
-## Incomplete
-
 ### Rapid Deployment
 
 Factories and factory plates build units 200% faster, but all newly finished mobile units start with a 20 second disarm.
+Associated gadget: `LuaRules/Gadgets/card_rapid_deployment.lua`
 Category: Neutral
 
 ### Frontier Economy
 
 Metal extractors produce 25% more metal when no enemy units are nearby, but 25% less metal while contested.
 Cloaked units aren't counted.
+Associated gadget: `LuaRules/Gadgets/card_frontier_economy.lua`
 Category: Neutral
 
 ### Siege Doctrine
 
 Static defenses gain 50% range and 25% slower turn rate; mobile combat units lose 25% move speed.
+Associated gadget: `LuaRules/Gadgets/card_siege_doctrine.lua`
 Category: Neutral
 
 ### Emergency Reserves
 
 When metal or energy storage drops below a threshold, the team receives a short burst of extra income or storage efficiency.
+Associated gadget: `LuaRules/Gadgets/card_emergency_reserves.lua`
 Category: Good
 
 ### Hardened Logistics
 
 Static units have 50% bonus max HP and repair twice as fast.
+Associated gadget: `LuaRules/Gadgets/card_hardened_logistics.lua`
 Category: Good
 
 ### Field Repairs
 
 All idle mobile units slowly regenerate health after being out of combat (i.e. not attacked) for a short period.
+Associated gadget: `LuaRules/Gadgets/card_field_repairs.lua`
 Category: Good
 
 ### Deep Magazines
 
 Units with burst weapons reload more slowly between bursts, but gain a larger burst size or magazine capacity.
+Associated gadget: `LuaRules/Gadgets/card_deep_magazines.lua`
 Category: Good
+
+## Incomplete
 
 ### Fragile Munitions
 
