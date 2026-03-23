@@ -37,7 +37,7 @@ Category: Bad
 
 ### Storage Mania
 
-Gain a 1% bonus to metal extractors for every 750 metal held in storage.
+Gain a 1% bonus to metal extractors for every 250 metal held in storage.
 Category: Good
 
 ### Energy Overload
@@ -170,7 +170,7 @@ Category: Bad
 
 ### Knockback
 
-Weapons apply knockback (impulse damage in the opposite direction) proportional to the damage that weapon applies.
+Weapons apply knockback (impulse damage in the opposite direction) to the firing unit proportional to the damage that weapon applies.
 Category: Bad
 
 ### Mega Lobster
@@ -195,7 +195,7 @@ Category: Neutral
 If you have at least 5 of a mobile unit, one of those mobile units (selected at random) is assigned as a Leader.
 Leaders gain +200% Max HP, +50% size, +100% attack range and +100% attack speed. 
 Additionally, all units of the same type within attack range gain a smaller bonus (+40% attack range and speed, no max HP bonus).
-If the Leader dies all units of that type on the same team in attack range also die. In this case, a new leader is selected when there are again at least 5 units of that type.
+If the Leader dies all units of that type on the same team in attack range also die. In this case, a new leader is selected when both 3 minutes have passed and there are again at least 5 units of that type.
 Leaders should have a color tint/glow which can be implemented similar to the EMP/Slow/Disarm effects.
 Category: Good
 
@@ -212,5 +212,39 @@ Category: Good
 
 ### Air Dominance
 
-Air units move at only 20% move speed, but rearm in the air and have +500% Max HP
+Air units move at only 20% move speed, but rearm in the air and have +200% Max HP
 Category: Good
+
+### No Terraform
+
+You can no longer terraform.
+Category: Bad
+
+### Lobster Airlines
+
+Hercules and Charon gain 1500% bonus HP, but ground units can no longer move without the assistance of air transport.
+Category: Neutral
+
+### Economy Pack
+
+You no longer gain metal from metal extractors; instead, your commanders' economy packs grow with commander level, beginning at base +4/4 metal/energy a second at level 1 (the default).
+Caps at +20/+20 metal/energy a second at level 20.
+Category: Good
+
+### Heavy Tanks
+
+Tanks get an 80% movespeed penalty, but gain 200% bonus Max HP and burst-fire in shots of 3 (see `unit_tech_k.lua`).
+Category: Neutral
+
+### Booster Jets
+
+Assault and riot units (including Dante) get booster jets. These push the unit forward and halve damage until the booster jet effects end.
+Activates automatically when target unit is out of range, or when target position is out of range and enemy units are nearby (i.e within 1.5x attack range).
+Lasts for 4 seconds and has a cooldown of 30 seconds.
+Category: Good
+
+### Point Defense
+
+All weapons now reload (almost) instantly. Instead of reloading, weapon range now grows gradually over time (from 1% range mult to 100% range mult), approaching 100% range mult at reload time.
+Weapons that stockpile aren't affected.
+Category: Neutral
