@@ -146,32 +146,37 @@ Units with burst weapons reload more slowly between bursts, but gain a larger bu
 Associated gadget: `LuaRules/Gadgets/card_deep_magazines.lua`
 Category: Good
 
-## Incomplete
-
 ### Fragile Munitions
 
 Weapons gain a small chance to misfire, dealing reduced damage or briefly stunning the firing unit.
+Associated gadget: `LuaRules/Gadgets/card_fragile_munitions.lua`
 Category: Bad
 
 ### Corroded Armor
 
 All non-commander units slowly lose a small percentage of max HP (5% per minute).
+Associated gadget: `LuaRules/Gadgets/card_corroded_armor.lua`
 Category: Bad
 
 ### Inefficient Refining
 
 Metal extractors produce more slowly unless they have at least 150% overdrive.
+Associated gadget: `LuaRules/Gadgets/card_inefficient_refining.lua`
 Category: Bad
 
 ### Battlefield Panic
 
 When an allied unit dies, nearby allied units are briefly slowed or disarmed.
+Associated gadget: `LuaRules/Gadgets/card_battlefield_panic.lua`
 Category: Bad
 
 ### Knockback
 
 Weapons apply knockback (impulse damage in the opposite direction) to the firing unit proportional to the damage that weapon applies.
+Associated gadget: `LuaRules/Gadgets/card_knockback.lua`
 Category: Bad
+
+## Incomplete
 
 ### Mega Lobster
 
