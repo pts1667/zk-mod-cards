@@ -21,11 +21,13 @@ local SCALE_MULT = 0.4
 local spGetAllyTeamList = Spring.GetAllyTeamList
 local spGetGaiaTeamID = Spring.GetGaiaTeamID
 local spGetTeamInfo = Spring.GetTeamInfo
+local spGetUnitDefID = Spring.GetUnitDefID
 
 local gaiaAllyTeam
 local striderHubDefID = UnitDefNames.striderhub and UnitDefNames.striderhub.id
 local allyTeamActive = {}
 local eligibleDefs = {}
+local appliedUnits = {}
 
 if striderHubDefID then
 	local buildOptions = UnitDefs[striderHubDefID].buildOptions or {}
@@ -53,6 +55,10 @@ local function UpdateCardActivation()
 end
 
 local function ApplyPartyEffect(unitID)
+	if appliedUnits[unitID] then
+		return
+	end
+
 	if GG.Attributes then
 		GG.Attributes.AddEffect(unitID, EFFECT_KEY, {
 			healthMult = HEALTH_MULT,
@@ -66,6 +72,25 @@ local function ApplyPartyEffect(unitID)
 	if GG.UnitModelRescale then
 		GG.UnitModelRescale(unitID, SCALE_MULT)
 	end
+
+	appliedUnits[unitID] = true
+end
+
+local function TryApplyFromBuilder(unitID, unitDefID, unitTeam, builderID, builderDefID)
+	if not (builderID and eligibleDefs[unitDefID]) then
+		return
+	end
+	if not builderDefID then
+		builderDefID = spGetUnitDefID(builderID)
+	end
+	if builderDefID ~= striderHubDefID then
+		return
+	end
+
+	local allyTeamID = GetTeamAllyTeam(unitTeam)
+	if allyTeamActive[allyTeamID] then
+		ApplyPartyEffect(unitID)
+	end
 end
 
 function gadget:UnitFromFactory(unitID, unitDefID, unitTeam, facID, facDefID)
@@ -76,6 +101,18 @@ function gadget:UnitFromFactory(unitID, unitDefID, unitTeam, facID, facDefID)
 	if allyTeamActive[allyTeamID] then
 		ApplyPartyEffect(unitID)
 	end
+end
+
+function gadget:UnitCreated(unitID, unitDefID, unitTeam, builderID)
+	TryApplyFromBuilder(unitID, unitDefID, unitTeam, builderID)
+end
+
+function gadget:UnitFinished(unitID, unitDefID, unitTeam, builderID)
+	TryApplyFromBuilder(unitID, unitDefID, unitTeam, builderID)
+end
+
+function gadget:UnitDestroyed(unitID)
+	appliedUnits[unitID] = nil
 end
 
 function gadget:GameFrame(frame)

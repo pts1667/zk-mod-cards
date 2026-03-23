@@ -146,6 +146,16 @@ Units with burst weapons reload more slowly between bursts, but gain a larger bu
 Associated gadget: `LuaRules/Gadgets/card_deep_magazines.lua`
 Category: Good
 
+### Lead the Charge
+
+If you have at least 5 of a mobile unit, one of those mobile units (selected at random) is assigned as a Leader.
+Leaders gain +200% Max HP, +50% size, +100% attack range and +100% attack speed. 
+Additionally, all units of the same type within attack range gain a smaller bonus (+40% attack range and speed, no max HP bonus).
+If the Leader dies all units of that type on the same team in attack range also die. In this case, a new leader is selected when both 3 minutes have passed and there are again at least 5 units of that type.
+Leaders should have a color tint/glow which can be implemented similar to the EMP/Slow/Disarm effects.
+Associated gadget: `LuaRules/Gadgets/card_lead_the_charge.lua`
+Category: Good
+
 ### Fragile Munitions
 
 Weapons gain a small chance to misfire, dealing reduced damage or briefly stunning the firing unit.
@@ -176,6 +186,15 @@ Weapons apply knockback (impulse damage in the opposite direction) to the firing
 Associated gadget: `LuaRules/Gadgets/card_knockback.lua`
 Category: Bad
 
+### Sleep
+
+Your units grow tired and must sleep. Units must sleep for 30 seconds once every 5 minutes.
+During sleep, they can't do anything (but regenerate at 2 max HP/second).
+Should be implemented in a similar way to EMP/Slow/Disarm, with its own effect and status bar.
+Associated gadget: `LuaRules/Gadgets/card_sleep.lua`
+Associated widget: `LuaUI/Widgets/gui_sleep_status.lua`
+Category: Bad
+
 ## Incomplete
 
 ### Mega Lobster
@@ -183,26 +202,10 @@ Category: Bad
 Lobsters have 500% bonus HP, 100% bonus size and 100% bonus range. Additionally, they can throw buildings.
 Category: Good
 
-### Sleep
-
-Your units grow tired and must sleep. Units must sleep for 30 seconds once every 5 minutes.
-During sleep, they can't do anything (but regenerate at 2 max HP/second).
-Should be implemented in a similar way to EMP/Slow/Disarm, with its own effect and status bar.
-Category: Bad
-
 ### Pre-Charged Shields
 
 Shields can't recharge; however, they gain 10x their charge capacity when built.
 Category: Neutral
-
-### Lead the Charge
-
-If you have at least 5 of a mobile unit, one of those mobile units (selected at random) is assigned as a Leader.
-Leaders gain +200% Max HP, +50% size, +100% attack range and +100% attack speed. 
-Additionally, all units of the same type within attack range gain a smaller bonus (+40% attack range and speed, no max HP bonus).
-If the Leader dies all units of that type on the same team in attack range also die. In this case, a new leader is selected when both 3 minutes have passed and there are again at least 5 units of that type.
-Leaders should have a color tint/glow which can be implemented similar to the EMP/Slow/Disarm effects.
-Category: Good
 
 ### Be Careful
 

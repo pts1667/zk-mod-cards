@@ -183,6 +183,15 @@ local defs = {
 		effectType = "deep_magazines",
 	},
 	{
+		id = 210,
+		name = "Lead the Charge",
+		shortDescription = "Large same-type groups gain a buffed leader with a combat aura.",
+		description = "When a team fields at least five finished mobile units of the same type, one becomes a Leader. Leaders gain huge combat bonuses and project a smaller range and reload aura to nearby allies of the same type. If the Leader dies, nearby matching units die too, and a replacement cannot be chosen for three minutes.",
+		category = CATEGORY.GOOD,
+		image = "LuaUI/Images/commands/Bold/guard.png",
+		effectType = "lead_the_charge",
+	},
+	{
 		id = 301,
 		name = "Irreplacable Parts",
 		shortDescription = "Repairs consume metal in proportion to health restored.",
@@ -253,6 +262,15 @@ local defs = {
 		category = CATEGORY.BAD,
 		image = "LuaUI/Images/commands/Bold/move.png",
 		effectType = "knockback",
+	},
+	{
+		id = 309,
+		name = "Sleep",
+		shortDescription = "Mobile units periodically fall asleep and become briefly inactive.",
+		description = "Allied mobile units eventually grow tired, falling asleep for 30 seconds once every five minutes. Sleeping units cannot act, but regenerate a small amount of health while they rest.",
+		category = CATEGORY.BAD,
+		image = "LuaUI/Images/commands/Bold/wait.png",
+		effectType = "sleep",
 	},
 }
 
