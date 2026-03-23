@@ -195,33 +195,38 @@ Associated gadget: `LuaRules/Gadgets/card_sleep.lua`
 Associated widget: `LuaUI/Widgets/gui_sleep_status.lua`
 Category: Bad
 
-## Incomplete
-
 ### Mega Lobster
 
 Lobsters have 500% bonus HP, 100% bonus size and 100% bonus range. Additionally, they can throw buildings.
+Associated gadget: `LuaRules/Gadgets/card_mega_lobster.lua`
 Category: Good
 
 ### Pre-Charged Shields
 
 Shields can't recharge; however, they gain 10x their charge capacity when built.
+Associated gadget: `LuaRules/Gadgets/card_pre_charged_shields.lua`
 Category: Neutral
 
 ### Be Careful
 
 If all commanders on your team are dead, all units on your team also die.
+Associated gadget: `LuaRules/Gadgets/card_be_careful.lua`
 Category: Bad
 
 ### Monopoly
 
 If your team has the highest metal income, gain 50% bonus metal income.
 Measured by average metal income over the last 3 minutes.
+Associated gadget: `LuaRules/Gadgets/card_monopoly.lua`
 Category: Good
 
 ### Air Dominance
 
 Air units move at only 20% move speed, but rearm in the air and have +200% Max HP
+Associated gadget: `LuaRules/Gadgets/card_air_dominance.lua`
 Category: Good
+
+## Incomplete
 
 ### No Terraform
 
@@ -241,7 +246,7 @@ Category: Good
 
 ### Heavy Tanks
 
-Tanks get an 80% movespeed penalty, but gain 200% bonus Max HP and burst-fire in shots of 3 (see `unit_tech_k.lua`).
+Tanks get an 80% movespeed penalty, but gain 200% bonus Max HP, 100% bonus unit size, and burst-fire in shots of 3 (see `unit_tech_k.lua`).
 Category: Neutral
 
 ### Booster Jets
