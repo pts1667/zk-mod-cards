@@ -252,7 +252,7 @@ Category: Neutral
 ### Booster Jets
 
 Assault and riot units (including Dante) get booster jets. These push the unit forward and halve damage until the booster jet effects end.
-Activates automatically when target unit is out of range, or when target position is out of range and enemy units are nearby (i.e within 1.5x attack range).
+Activates automatically when target unit is out of range, or when target position is out of range and enemy units are nearby (i.e within 1.5x attack range). Checked periodically.
 Lasts for 4 seconds and has a cooldown of 30 seconds.
 Category: Good
 
