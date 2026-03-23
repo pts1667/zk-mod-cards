@@ -226,27 +226,29 @@ Air units move at only 20% move speed, but rearm in the air and have +200% Max H
 Associated gadget: `LuaRules/Gadgets/card_air_dominance.lua`
 Category: Good
 
-## Incomplete
-
 ### No Terraform
 
 You can no longer terraform.
+Associated gadget: `LuaRules/Gadgets/card_no_terraform.lua`
 Category: Bad
 
 ### Lobster Airlines
 
 Hercules and Charon gain 1500% bonus HP, but ground units can no longer move without the assistance of air transport.
+Associated gadget: `LuaRules/Gadgets/card_lobster_airlines.lua`
 Category: Neutral
 
 ### Economy Pack
 
 You no longer gain metal from metal extractors; instead, your commanders' economy packs grow with commander level, beginning at base +4/4 metal/energy a second at level 1 (the default).
 Caps at +20/+20 metal/energy a second at level 20.
+Associated gadget: `LuaRules/Gadgets/card_economy_pack.lua`
 Category: Good
 
 ### Heavy Tanks
 
 Tanks get an 80% movespeed penalty, but gain 200% bonus Max HP, 100% bonus unit size, and burst-fire in shots of 3 (see `unit_tech_k.lua`).
+Associated gadget: `LuaRules/Gadgets/card_heavy_tanks.lua`
 Category: Neutral
 
 ### Booster Jets
@@ -254,10 +256,14 @@ Category: Neutral
 Assault and riot units (including Dante) get booster jets. These push the unit forward and halve damage until the booster jet effects end.
 Activates automatically when target unit is out of range, or when target position is out of range and enemy units are nearby (i.e within 1.5x attack range). Checked periodically.
 Lasts for 4 seconds and has a cooldown of 30 seconds.
+Associated gadget: `LuaRules/Gadgets/card_booster_jets.lua`
 Category: Good
 
 ### Point Defense
 
 All weapons now reload (almost) instantly. Instead of reloading, weapon range now grows gradually over time (from 1% range mult to 100% range mult), approaching 100% range mult at reload time.
 Weapons that stockpile aren't affected.
+Associated gadget: `LuaRules/Gadgets/card_point_defense.lua`
 Category: Neutral
+
+## Incomplete
