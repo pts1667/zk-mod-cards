@@ -25,6 +25,12 @@ local screen0
 
 local WINDOW_WIDTH = 1140
 local WINDOW_HEIGHT_EXPANDED = 520
+local CARD_AREA_LEFT = 16
+local CARD_AREA_TOP = 88
+local CARD_AREA_HEIGHT = 300
+local CARD_GAP = 16
+local HISTORY_PANEL_WIDTH = 180
+local HISTORY_PANEL_RIGHT = 16
 
 local window
 local headerLabel
@@ -171,9 +177,9 @@ end
 local function CreateCardControl(parent, leftPos)
 	local button = Button:New{
 		x = leftPos,
-		y = 88,
+		y = CARD_AREA_TOP,
 		width = 280,
-		height = 300,
+		height = CARD_AREA_HEIGHT,
 		padding = {10, 10, 10, 10},
 		caption = "",
 		noFont = true,
@@ -225,6 +231,25 @@ local function CreateCardControl(parent, leftPos)
 		body = body,
 		footer = footer,
 	}
+end
+
+local function LayoutCardControls(offerCount)
+	local count = math.max(1, math.min(constants.MAX_OFFERS_PER_DRAFT, offerCount or constants.OFFERS_PER_DRAFT))
+	local availableWidth = WINDOW_WIDTH - CARD_AREA_LEFT - HISTORY_PANEL_WIDTH - HISTORY_PANEL_RIGHT - 28
+	local buttonWidth = math.floor((availableWidth - CARD_GAP * (count - 1)) / count)
+	for slot = 1, #cardControls do
+		local control = cardControls[slot]
+		local visible = slot <= count
+		control.button:SetVisibility(visible)
+		if visible then
+			control.button.x = CARD_AREA_LEFT + (slot - 1) * (buttonWidth + CARD_GAP)
+			control.button.y = CARD_AREA_TOP
+			control.button.width = buttonWidth
+			control.button.height = CARD_AREA_HEIGHT
+			control.button:UpdateClientArea()
+			control.button:Invalidate()
+		end
+	end
 end
 
 local function InitializeWindow()
@@ -296,9 +321,9 @@ local function InitializeWindow()
 	}
 
 	historyPanel = Panel:New{
-		right = 16,
+		right = HISTORY_PANEL_RIGHT,
 		y = 88,
-		width = 180,
+		width = HISTORY_PANEL_WIDTH,
 		bottom = 16,
 		padding = {10, 10, 10, 10},
 		parent = window,
@@ -334,9 +359,10 @@ local function InitializeWindow()
 		parent = historyPanel,
 	}
 
-	cardControls[1] = CreateCardControl(window, 16)
-	cardControls[2] = CreateCardControl(window, 324)
-	cardControls[3] = CreateCardControl(window, 632)
+	for slot = 1, constants.MAX_OFFERS_PER_DRAFT do
+		cardControls[slot] = CreateCardControl(window, CARD_AREA_LEFT)
+	end
+	LayoutCardControls(constants.OFFERS_PER_DRAFT)
 
 	window:SetVisibility(false)
 	window.OnResize = {
@@ -379,6 +405,7 @@ local function RefreshUI(forceOpen)
 
 	local categoryID = Spring.GetTeamRulesParam(teamID, PREFIX .. "_stage_category") or Spring.GetGameRulesParam(PREFIX .. "_stage_category") or 0
 	local closeFrame = Spring.GetTeamRulesParam(teamID, PREFIX .. "_close_frame") or Spring.GetGameRulesParam(PREFIX .. "_stage_close_frame") or 0
+	local offerCount = Spring.GetTeamRulesParam(teamID, PREFIX .. "_offer_count") or constants.OFFERS_PER_DRAFT
 	local currentFrame = Spring.GetGameFrame()
 	local selectedStageSeq = Spring.GetPlayerRulesParam(GetMyPlayerID(), PREFIX .. "_vote_stage_seq")
 	local selectedSlot = 0
@@ -388,9 +415,10 @@ local function RefreshUI(forceOpen)
 
 	headerLabel:SetCaption(string.format("%s Cards", CATEGORY_NAME[categoryID] or "Unknown"))
 	timerLabel:SetCaption(FormatSeconds(closeFrame - currentFrame))
-	subtitleLabel:SetText("Vote for one of three cards. Highest votes win; ties are broken randomly.")
+	subtitleLabel:SetText(string.format("Vote for one of %d cards. Highest votes win; ties are broken randomly.", offerCount))
+	LayoutCardControls(offerCount)
 
-	for slot = 1, constants.OFFERS_PER_DRAFT do
+	for slot = 1, #cardControls do
 		local cardID = Spring.GetTeamRulesParam(teamID, PREFIX .. "_offer_" .. slot .. "_id") or 0
 		local voteCount = Spring.GetTeamRulesParam(teamID, PREFIX .. "_offer_" .. slot .. "_votes") or 0
 		UpdateCardButton(cardControls[slot], cardID, slot, stageSeq, voteCount, selectedSlot)

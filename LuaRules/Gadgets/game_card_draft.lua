@@ -24,6 +24,7 @@ local spGetAllyTeamList = Spring.GetAllyTeamList
 local spGetGameFrame = Spring.GetGameFrame
 local spGetGaiaTeamID = Spring.GetGaiaTeamID
 local spGetAIInfo = Spring.GetAIInfo
+local spGetModOptions = Spring.GetModOptions
 local spGetPlayerInfo = Spring.GetPlayerInfo
 local spGetPlayerList = Spring.GetPlayerList
 local spGetTeamInfo = Spring.GetTeamInfo
@@ -52,15 +53,55 @@ local stage = {
 
 local ApplyEffect = {}
 
+local modOptions = spGetModOptions() or {}
+
+local function ClampNumberOption(value, default, minimum, maximum)
+	value = tonumber(value)
+	if not value then
+		return default
+	end
+	return math.max(minimum, math.min(maximum, value))
+end
+
+local FIRST_DRAFT_FRAME = ClampNumberOption(modOptions.zk_cards_first_draft_seconds, constants.FIRST_DRAFT_FRAME / constants.GAME_SPEED, 0, 36000) * constants.GAME_SPEED
+local SECOND_DRAFT_FRAME = ClampNumberOption(modOptions.zk_cards_second_draft_seconds, constants.SECOND_DRAFT_FRAME / constants.GAME_SPEED, 0, 36000) * constants.GAME_SPEED
+local THIRD_DRAFT_FRAME = ClampNumberOption(modOptions.zk_cards_third_draft_seconds, constants.THIRD_DRAFT_FRAME / constants.GAME_SPEED, 0, 36000) * constants.GAME_SPEED
+local REPEAT_DRAFT_INTERVAL_FRAMES = ClampNumberOption(modOptions.zk_cards_repeat_draft_interval_seconds, constants.REPEAT_DRAFT_INTERVAL_FRAMES / constants.GAME_SPEED, 1, 36000) * constants.GAME_SPEED
+local OFFERS_PER_DRAFT = ClampNumberOption(modOptions.zk_cards_offers_per_draft, constants.OFFERS_PER_DRAFT, 1, constants.MAX_OFFERS_PER_DRAFT)
+local CATEGORY_WEIGHTS = {
+	[CATEGORY.NEUTRAL] = ClampNumberOption(modOptions.zk_cards_neutral_weight, constants.CATEGORY_WEIGHT_NEUTRAL, 0, 1000),
+	[CATEGORY.GOOD] = ClampNumberOption(modOptions.zk_cards_good_weight, constants.CATEGORY_WEIGHT_GOOD, 0, 1000),
+	[CATEGORY.BAD] = ClampNumberOption(modOptions.zk_cards_bad_weight, constants.CATEGORY_WEIGHT_BAD, 0, 1000),
+}
+
+local function ChooseWeightedCategory()
+	local total = CATEGORY_WEIGHTS[CATEGORY.NEUTRAL] + CATEGORY_WEIGHTS[CATEGORY.GOOD] + CATEGORY_WEIGHTS[CATEGORY.BAD]
+	if total <= 0 then
+		return CATEGORY.NEUTRAL
+	end
+	local pick = math.random() * total
+	local running = CATEGORY_WEIGHTS[CATEGORY.NEUTRAL]
+	if pick <= running then
+		return CATEGORY.NEUTRAL
+	end
+	running = running + CATEGORY_WEIGHTS[CATEGORY.GOOD]
+	if pick <= running then
+		return CATEGORY.GOOD
+	end
+	return CATEGORY.BAD
+end
+
+stage.nextOpenFrame = FIRST_DRAFT_FRAME
+
 local function GetScheduledDraftFrame(seq)
 	if seq <= 1 then
-		return constants.FIRST_DRAFT_FRAME
+		return FIRST_DRAFT_FRAME
 	elseif seq == 2 then
-		return constants.SECOND_DRAFT_FRAME
+		return SECOND_DRAFT_FRAME
 	elseif seq == 3 then
-		return constants.THIRD_DRAFT_FRAME
+		return THIRD_DRAFT_FRAME
 	end
-	return constants.THIRD_DRAFT_FRAME + (seq - 3) * constants.REPEAT_DRAFT_INTERVAL_FRAMES
+	return THIRD_DRAFT_FRAME + (seq - 3) * REPEAT_DRAFT_INTERVAL_FRAMES
 end
 
 local function ShuffleCopy(source)
@@ -164,7 +205,7 @@ local function ClearTeamStageParams(teamID)
 	spSetTeamRulesParam(teamID, PREFIX .. "_open_frame", 0, ALLIED_VISIBLE)
 	spSetTeamRulesParam(teamID, PREFIX .. "_close_frame", 0, ALLIED_VISIBLE)
 	spSetTeamRulesParam(teamID, PREFIX .. "_offer_count", 0, ALLIED_VISIBLE)
-	for slot = 1, constants.OFFERS_PER_DRAFT do
+	for slot = 1, constants.MAX_OFFERS_PER_DRAFT do
 		spSetTeamRulesParam(teamID, PREFIX .. "_offer_" .. slot .. "_id", 0, ALLIED_VISIBLE)
 		spSetTeamRulesParam(teamID, PREFIX .. "_offer_" .. slot .. "_votes", 0, ALLIED_VISIBLE)
 	end
@@ -210,7 +251,7 @@ local function PublishStageForAllyTeam(allyTeamID)
 			spSetTeamRulesParam(teamID, PREFIX .. "_open_frame", stage.openFrame, ALLIED_VISIBLE)
 			spSetTeamRulesParam(teamID, PREFIX .. "_close_frame", stage.closeFrame, ALLIED_VISIBLE)
 			spSetTeamRulesParam(teamID, PREFIX .. "_offer_count", #draft.offers, ALLIED_VISIBLE)
-			for slot = 1, constants.OFFERS_PER_DRAFT do
+			for slot = 1, constants.MAX_OFFERS_PER_DRAFT do
 				spSetTeamRulesParam(teamID, PREFIX .. "_offer_" .. slot .. "_id", draft.offers[slot] or 0, ALLIED_VISIBLE)
 				spSetTeamRulesParam(teamID, PREFIX .. "_offer_" .. slot .. "_votes", draft.voteCounts[slot] or 0, ALLIED_VISIBLE)
 			end
@@ -246,7 +287,7 @@ local function ChooseOffersForAllyTeam(allyTeamID, category)
 			if not chosenSet[cardID] and (not excludeApplied or not appliedState.countByCardID[cardID]) then
 				chosen[#chosen + 1] = cardID
 				chosenSet[cardID] = true
-				if #chosen >= constants.OFFERS_PER_DRAFT then
+				if #chosen >= OFFERS_PER_DRAFT then
 					return
 				end
 			end
@@ -254,7 +295,7 @@ local function ChooseOffersForAllyTeam(allyTeamID, category)
 	end
 
 	TakeFromPool(cardData.idsByCategory[category], true)
-	if #chosen < constants.OFFERS_PER_DRAFT then
+	if #chosen < OFFERS_PER_DRAFT then
 		TakeFromPool(cardData.idsByCategory[category], false)
 	end
 
@@ -401,7 +442,7 @@ end
 local function OpenNewStage(frame)
 	stage.seq = stage.seq + 1
 	stage.active = true
-	stage.category = math.random(CATEGORY.NEUTRAL, CATEGORY.BAD)
+	stage.category = ChooseWeightedCategory()
 	stage.openFrame = frame
 	stage.closeFrame = frame + constants.VOTE_DURATION_FRAMES
 	stage.nextOpenFrame = GetScheduledDraftFrame(stage.seq + 1)
@@ -419,12 +460,15 @@ local function OpenNewStage(frame)
 		local players = GetHumanPlayersForAllyTeam(allyTeamID)
 		local draft = {
 			offers = offers,
-			voteCounts = {0, 0, 0},
+			voteCounts = {},
 			playerVotes = {},
 			resolved = false,
 			winningSlot = nil,
 			winningCardID = nil,
 		}
+		for slot = 1, #offers do
+			draft.voteCounts[slot] = 0
+		end
 		stage.drafts[allyTeamID] = draft
 
 		for j = 1, #players do
