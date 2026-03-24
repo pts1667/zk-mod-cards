@@ -18,6 +18,7 @@ local glText = gl.Text
 local announcementText = false
 local expireAt = 0
 local lastAnnouncementSeq = 0
+local lastBountyAnnouncementSeq = 0
 local DISPLAY_SECONDS = 7
 local HEADLINE_SIZE = 34
 local BODY_SIZE = 22
@@ -62,7 +63,7 @@ end
 local function RefreshFromRulesParams()
 	local announcementSeq = Spring.GetGameRulesParam(PREFIX .. "_announce_seq") or 0
 	if announcementSeq <= 0 or announcementSeq == lastAnnouncementSeq then
-		return
+		return false
 	end
 
 	local rawAllyTeams = Spring.GetAllyTeamList() or {}
@@ -79,12 +80,43 @@ local function RefreshFromRulesParams()
 	lastAnnouncementSeq = announcementSeq
 	if #lines > 1 then
 		SetAnnouncement(table.concat(lines, "\n"))
+		return true
 	end
+	return false
+end
+
+local function RefreshBountyAnnouncement()
+	local announcementSeq = Spring.GetGameRulesParam(PREFIX .. "_bounty_announce_seq") or 0
+	if announcementSeq <= 0 or announcementSeq == lastBountyAnnouncementSeq then
+		return false
+	end
+
+	local teamID = Spring.GetGameRulesParam(PREFIX .. "_bounty_announce_team")
+	local unitDefID = Spring.GetGameRulesParam(PREFIX .. "_bounty_announce_unitdef")
+	local unitDef = unitDefID and UnitDefs[unitDefID]
+	if not (teamID and unitDef) then
+		lastBountyAnnouncementSeq = announcementSeq
+		return false
+	end
+
+	lastBountyAnnouncementSeq = announcementSeq
+	local ownerName = "Unknown"
+	local _, leaderPlayerID = Spring.GetTeamInfo(teamID, false)
+	if leaderPlayerID and leaderPlayerID >= 0 then
+		ownerName = Spring.GetPlayerInfo(leaderPlayerID, false) or ownerName
+	end
+	SetAnnouncement(string.format(
+		"Bounty:\nIf %s's %s is destroyed, everyone gets an economy bonus.",
+		ownerName,
+		unitDef.humanName or unitDef.name or "unit"
+	))
+	return true
 end
 
 function widget:Initialize()
 	WG.ZKCardsDraftAnnouncement = SetAnnouncement
 	RefreshFromRulesParams()
+	RefreshBountyAnnouncement()
 end
 
 function widget:Shutdown()
@@ -94,7 +126,9 @@ function widget:Shutdown()
 end
 
 function widget:DrawScreen()
-	RefreshFromRulesParams()
+	if not RefreshFromRulesParams() then
+		RefreshBountyAnnouncement()
+	end
 
 	if not announcementText then
 		return

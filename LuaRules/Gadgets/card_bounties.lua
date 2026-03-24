@@ -20,6 +20,8 @@ local HIGH_VALUE_COST = 700
 local BOUNTY_INTERVAL_FRAMES = 5 * 60 * Game.gameSpeed
 local BONUS_DURATION_FRAMES = 5 * 60 * Game.gameSpeed
 local PENALTY_DURATION_FRAMES = 3 * 60 * Game.gameSpeed
+local PREFIX = "zk_cards"
+local PUBLIC_VISIBLE = {public = true}
 
 local spCreateUnit = Spring.CreateUnit
 local spDestroyUnit = Spring.DestroyUnit
@@ -46,7 +48,6 @@ local spSetUnitNoMinimap = Spring.SetUnitNoMinimap
 local spSetUnitNoSelect = Spring.SetUnitNoSelect
 local spSetUnitPosition = Spring.SetUnitPosition
 local spSetUnitSensorRadius = Spring.SetUnitSensorRadius
-local spSendMessageToTeam = Spring.SendMessageToTeam
 local spValidUnitID = Spring.ValidUnitID
 
 local gaiaAllyTeam
@@ -87,14 +88,6 @@ local function GetLivingTeamForAllyTeam(allyTeamID)
 		end
 	end
 	return nil
-end
-
-local function BroadcastMessage(message)
-	for _, allyTeamID in ipairs(GetLivingAllyTeams()) do
-		for _, teamID in ipairs(spGetTeamList(allyTeamID) or {}) do
-			spSendMessageToTeam(teamID, message)
-		end
-	end
 end
 
 local function EnsureIncomeTable()
@@ -309,7 +302,9 @@ local function OpenBountyForAllyTeam(allyTeamID, state)
 		return
 	end
 
-	BroadcastMessage("Bounty: if " .. GetTargetOwnerName(target.teamID) .. "'s " .. target.name .. " is destroyed, everyone gets an economy bonus.")
+	spSetGameRulesParam(PREFIX .. "_bounty_announce_team", target.teamID, PUBLIC_VISIBLE)
+	spSetGameRulesParam(PREFIX .. "_bounty_announce_unitdef", spGetUnitDefID(target.unitID) or 0, PUBLIC_VISIBLE)
+	spSetGameRulesParam(PREFIX .. "_bounty_announce_seq", spGetGameFrame(), PUBLIC_VISIBLE)
 end
 
 local function UpdateBountyActivation()

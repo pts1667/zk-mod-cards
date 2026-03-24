@@ -52,6 +52,17 @@ local stage = {
 
 local ApplyEffect = {}
 
+local function GetScheduledDraftFrame(seq)
+	if seq <= 1 then
+		return constants.FIRST_DRAFT_FRAME
+	elseif seq == 2 then
+		return constants.SECOND_DRAFT_FRAME
+	elseif seq == 3 then
+		return constants.THIRD_DRAFT_FRAME
+	end
+	return constants.THIRD_DRAFT_FRAME + (seq - 3) * constants.REPEAT_DRAFT_INTERVAL_FRAMES
+end
+
 local function ShuffleCopy(source)
 	local copy = {}
 	for i = 1, #source do
@@ -393,7 +404,7 @@ local function OpenNewStage(frame)
 	stage.category = math.random(CATEGORY.NEUTRAL, CATEGORY.BAD)
 	stage.openFrame = frame
 	stage.closeFrame = frame + constants.VOTE_DURATION_FRAMES
-	stage.nextOpenFrame = frame + math.random(constants.MIN_DELAY_FRAMES, constants.MAX_DELAY_FRAMES)
+	stage.nextOpenFrame = GetScheduledDraftFrame(stage.seq + 1)
 	stage.drafts = {}
 
 	local allyTeams = GetLivingAllyTeams()
