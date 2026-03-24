@@ -26,6 +26,7 @@ local emptyLabel
 local lastRenderedText
 local expanded = true
 local expandedHeight = PANEL_HEIGHT
+local spectatorViewedTeamID
 
 local PANEL_X = 0
 local PANEL_Y = 50
@@ -39,6 +40,14 @@ end
 
 local function GetMyTeamID()
 	return Spring.GetMyTeamID()
+end
+
+local function GetGaiaTeamID()
+	return Spring.GetGaiaTeamID()
+end
+
+local function GetUnitTeam(unitID)
+	return Spring.GetUnitTeam(unitID)
 end
 
 local function GetSpecialFont(size, color)
@@ -111,7 +120,7 @@ local function EnsureWindow()
 		right = 8,
 		bottom = 8,
 		padding = {0, 0, 0, 0},
-		font = GetSpecialFont(13, {0.90, 0.90, 0.90, 1}),
+		objectOverrideFont = GetSpecialFont(13, {0.90, 0.90, 0.90, 1}),
 		text = "",
 		parent = window,
 	}
@@ -163,7 +172,10 @@ local function Refresh()
 	end
 
 	local teamID = GetMyTeamID()
-	if IsSpectator() or not teamID then
+	local spectator = IsSpectator()
+	if spectator then
+		teamID = spectatorViewedTeamID
+	elseif not teamID then
 		HideWindow()
 		return
 	end
@@ -174,10 +186,17 @@ local function Refresh()
 		return
 	end
 
+	if not teamID then
+		bodyText:SetText("")
+		emptyLabel:SetCaption("Select a unit to inspect that team's cards.")
+		lastRenderedText = ""
+		return
+	end
+
 	local appliedCount = Spring.GetTeamRulesParam(teamID, PREFIX .. "_applied_count") or 0
 	if appliedCount <= 0 then
 		bodyText:SetText("")
-		emptyLabel:SetCaption("No cards picked yet.")
+		emptyLabel:SetCaption(spectator and "That team has not picked any cards yet." or "No cards picked yet.")
 		lastRenderedText = ""
 		return
 	end
@@ -198,6 +217,22 @@ local function Refresh()
 		lastRenderedText = renderedText
 	end
 	emptyLabel:SetCaption("")
+end
+
+function widget:SelectionChanged(selectedUnits)
+	if not IsSpectator() then
+		return
+	end
+
+	local gaiaTeamID = GetGaiaTeamID()
+	for i = #selectedUnits, 1, -1 do
+		local teamID = GetUnitTeam(selectedUnits[i])
+		if teamID and teamID ~= gaiaTeamID then
+			spectatorViewedTeamID = teamID
+			break
+		end
+	end
+	Refresh()
 end
 
 function widget:Initialize()

@@ -211,7 +211,7 @@ local function InitializeWindow()
 		y = 40,
 		right = 16,
 		height = 30,
-		font = GetSpecialFont(14, {0.88, 0.88, 0.88, 1}),
+		objectOverrideFont = GetSpecialFont(14, {0.88, 0.88, 0.88, 1}),
 		text = "Grant any card immediately to any allyteam while cheats are enabled.",
 		parent = window,
 	}
@@ -293,7 +293,7 @@ local function InitializeWindow()
 		y = 58,
 		right = 0,
 		bottom = 0,
-		font = GetSpecialFont(13, {0.88, 0.88, 0.88, 1}),
+		objectOverrideFont = GetSpecialFont(13, {0.88, 0.88, 0.88, 1}),
 		text = "",
 		parent = previewPanel,
 	}

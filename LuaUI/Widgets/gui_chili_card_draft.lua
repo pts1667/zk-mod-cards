@@ -193,7 +193,7 @@ local function CreateCardControl(parent, leftPos)
 		y = 16,
 		right = 12,
 		height = 54,
-		font = GetSpecialFont(18, {1, 1, 1, 1}),
+		objectOverrideFont = GetSpecialFont(18, {1, 1, 1, 1}),
 		text = "",
 		parent = button,
 	}
@@ -203,7 +203,7 @@ local function CreateCardControl(parent, leftPos)
 		y = 84,
 		right = 18,
 		height = 154,
-		font = GetSpecialFont(14, {0.88, 0.88, 0.88, 1}),
+		objectOverrideFont = GetSpecialFont(14, {0.88, 0.88, 0.88, 1}),
 		text = "",
 		parent = button,
 	}
@@ -290,7 +290,7 @@ local function InitializeWindow()
 		y = 42,
 		right = 220,
 		height = 36,
-		font = GetSpecialFont(15, {0.88, 0.88, 0.88, 1}),
+		objectOverrideFont = GetSpecialFont(15, {0.88, 0.88, 0.88, 1}),
 		text = "Pick one card for your side before the timer expires.",
 		parent = window,
 	}
@@ -329,7 +329,7 @@ local function InitializeWindow()
 		y = 28,
 		right = 0,
 		bottom = 0,
-		font = GetSpecialFont(13, {0.90, 0.90, 0.90, 1}),
+		objectOverrideFont = GetSpecialFont(13, {0.90, 0.90, 0.90, 1}),
 		text = "",
 		parent = historyPanel,
 	}

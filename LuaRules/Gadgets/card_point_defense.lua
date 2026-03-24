@@ -28,6 +28,7 @@ local spGetTeamUnits = Spring.GetTeamUnits
 local spGetUnitDefID = Spring.GetUnitDefID
 local spGetUnitTeam = Spring.GetUnitTeam
 local spGetUnitWeaponState = Spring.GetUnitWeaponState
+local spSetUnitWeaponDamages = Spring.SetUnitWeaponDamages
 local spSetUnitWeaponState = Spring.SetUnitWeaponState
 local spValidUnitID = Spring.ValidUnitID
 
@@ -41,6 +42,10 @@ end
 
 local function GetEffectKey(unitID, weaponNum)
 	return EFFECT_KEY_PREFIX .. unitID .. "_" .. weaponNum
+end
+
+local function GetUnitEffectKey(unitID)
+	return EFFECT_KEY_PREFIX .. unitID .. "_unit"
 end
 
 local function UpdateCardActivation()
@@ -67,6 +72,8 @@ local function BuildWeaponData(unitDefID)
 				weaponNum = weaponNum,
 				baseReload = weaponDef.reload,
 				baseRange = weaponDef.range,
+				baseBurstRate = weaponDef.salvoDelay,
+				usesScriptReload = weaponDef.customParams and (weaponDef.customParams.script_reload or weaponDef.customParams.script_burst),
 				lastReloadState = false,
 				lastShotFrame = false,
 			}
@@ -101,6 +108,12 @@ local function RemoveWeaponEffect(unitID, weaponNum)
 	end
 end
 
+local function RemoveUnitEffect(unitID)
+	if GG.Attributes then
+		GG.Attributes.RemoveEffect(unitID, GetUnitEffectKey(unitID))
+	end
+end
+
 local function RestoreWeapon(unitID, weaponData, gameFrame)
 	local reloadState = spGetUnitWeaponState(unitID, weaponData.weaponNum, "reloadState")
 	local reloadTime = spGetUnitWeaponState(unitID, weaponData.weaponNum, "reloadTime")
@@ -112,40 +125,59 @@ local function RestoreWeapon(unitID, weaponData, gameFrame)
 		reloadTime = weaponData.baseReload + HALF_FRAME,
 		reloadState = nextReload or reloadState,
 	})
+	if weaponData.baseBurstRate then
+		spSetUnitWeaponState(unitID, weaponData.weaponNum, "burstRate", weaponData.baseBurstRate + HALF_FRAME)
+	end
+	if weaponData.appliedRangeMult then
+		local currentRange = spGetUnitWeaponState(unitID, weaponData.weaponNum, "range") or weaponData.baseRange
+		local restoredRange = currentRange / weaponData.appliedRangeMult
+		spSetUnitWeaponState(unitID, weaponData.weaponNum, "range", restoredRange)
+		spSetUnitWeaponDamages(unitID, weaponData.weaponNum, "dynDamageRange", restoredRange)
+	end
 	RemoveWeaponEffect(unitID, weaponData.weaponNum)
 	weaponData.lastReloadState = false
 	weaponData.lastShotFrame = false
+	weaponData.wasReady = false
+	weaponData.appliedRangeMult = false
+	weaponData.initialized = false
 end
 
-local function ApplyWeaponUpdate(unitID, weaponData, gameFrame)
+local function ApplyWeaponUpdate(unitID, weaponData, gameFrame, fastReloadSeconds)
 	local reloadState = spGetUnitWeaponState(unitID, weaponData.weaponNum, "reloadState")
 	if reloadState then
+		local isReady = reloadState <= gameFrame + 0.5
 		if weaponData.lastReloadState and reloadState > weaponData.lastReloadState + 0.5 then
 			weaponData.lastShotFrame = gameFrame
-		elseif not weaponData.lastReloadState and reloadState > gameFrame then
+		elseif weaponData.wasReady and not isReady then
+			weaponData.lastShotFrame = gameFrame
+		elseif not weaponData.initialized then
 			weaponData.lastShotFrame = gameFrame
 		end
+		weaponData.wasReady = isReady
 		weaponData.lastReloadState = reloadState
 	end
+	weaponData.initialized = true
 
-	local rangeMult = 1
-	if weaponData.lastShotFrame then
-		local elapsed = math.max(0, gameFrame - weaponData.lastShotFrame)
-		local progress = math.min(1, elapsed / (weaponData.baseReload * Game.gameSpeed))
-		rangeMult = RANGE_FLOOR + (1 - RANGE_FLOOR) * progress
+	local elapsed = math.max(0, gameFrame - (weaponData.lastShotFrame or gameFrame))
+	local progress = math.min(1, elapsed / (weaponData.baseReload * Game.gameSpeed))
+	local rangeMult = RANGE_FLOOR + (1 - RANGE_FLOOR) * progress
+	local currentRange = spGetUnitWeaponState(unitID, weaponData.weaponNum, "range") or weaponData.baseRange
+	local baselineRange = currentRange
+	if weaponData.appliedRangeMult and weaponData.appliedRangeMult > 0 then
+		baselineRange = currentRange / weaponData.appliedRangeMult
 	end
-
-	if GG.Attributes then
-		GG.Attributes.AddEffect(unitID, GetEffectKey(unitID, weaponData.weaponNum), {
-			weaponNum = weaponData.weaponNum,
-			range = rangeMult,
-			static = true,
-		})
-	end
+	local moddedRange = baselineRange * rangeMult
+	spSetUnitWeaponState(unitID, weaponData.weaponNum, "range", moddedRange)
+	spSetUnitWeaponDamages(unitID, weaponData.weaponNum, "dynDamageRange", moddedRange)
+	weaponData.appliedRangeMult = rangeMult
 
 	spSetUnitWeaponState(unitID, weaponData.weaponNum, {
-		reloadTime = FAST_RELOAD_FRAMES / Game.gameSpeed + HALF_FRAME,
+		reloadTime = fastReloadSeconds + HALF_FRAME,
 	})
+	if weaponData.baseBurstRate then
+		local burstRate = weaponData.baseBurstRate * fastReloadSeconds / weaponData.baseReload
+		spSetUnitWeaponState(unitID, weaponData.weaponNum, "burstRate", burstRate + HALF_FRAME)
+	end
 end
 
 local function TrackUnit(unitID, unitDefID)
@@ -182,6 +214,7 @@ function gadget:UnitDestroyed(unitID)
 		for i = 1, #data.weapons do
 			RemoveWeaponEffect(unitID, data.weapons[i].weaponNum)
 		end
+		RemoveUnitEffect(unitID)
 		trackedUnits[unitID] = nil
 	end
 end
@@ -203,15 +236,31 @@ function gadget:GameFrame(frame)
 			for i = 1, #(data.weapons or {}) do
 				RemoveWeaponEffect(unitID, data.weapons[i].weaponNum)
 			end
+			RemoveUnitEffect(unitID)
 			trackedUnits[unitID] = nil
 		else
 			local allyTeamID = GetTeamAllyTeam(teamID)
+			local fastReloadSeconds = FAST_RELOAD_FRAMES / Game.gameSpeed
+			local scriptReloadMult = false
 			for i = 1, #data.weapons do
 				if allyTeamActive[allyTeamID] then
-					ApplyWeaponUpdate(unitID, data.weapons[i], frame)
+					local weaponData = data.weapons[i]
+					ApplyWeaponUpdate(unitID, weaponData, frame, fastReloadSeconds)
+					if weaponData.usesScriptReload then
+						local neededMult = weaponData.baseReload / fastReloadSeconds
+						scriptReloadMult = math.max(scriptReloadMult or 1, neededMult)
+					end
 				else
 					RestoreWeapon(unitID, data.weapons[i], frame)
 				end
+			end
+			if allyTeamActive[allyTeamID] and scriptReloadMult and GG.Attributes then
+				GG.Attributes.AddEffect(unitID, GetUnitEffectKey(unitID), {
+					reload = scriptReloadMult,
+					static = true,
+				})
+			else
+				RemoveUnitEffect(unitID)
 			end
 		end
 	end
@@ -232,5 +281,6 @@ function gadget:Shutdown()
 				RemoveWeaponEffect(unitID, data.weapons[i].weaponNum)
 			end
 		end
+		RemoveUnitEffect(unitID)
 	end
 end

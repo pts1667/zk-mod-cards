@@ -21,6 +21,8 @@ local BOOST_MOVE_MULT = 2.5
 local BOOST_IMPULSE = 3.2
 local BOOST_SEARCH_MULT = 1.5
 local EFFECT_KEY_PREFIX = "zk_cards_booster_jets_"
+local ACTIVE_RULES_PARAM = "zk_cards_booster_jets_active"
+local INLOS_ACCESS = {inlos = true}
 
 local spGetAllyTeamList = Spring.GetAllyTeamList
 local spGetGaiaTeamID = Spring.GetGaiaTeamID
@@ -36,6 +38,7 @@ local spGetUnitTeam = Spring.GetUnitTeam
 local spGetUnitsInSphere = Spring.GetUnitsInSphere
 local spGetUnitTransporter = Spring.GetUnitTransporter
 local spAddUnitImpulse = Spring.AddUnitImpulse
+local spSetUnitRulesParam = Spring.SetUnitRulesParam
 
 local CMD_ATTACK = CMD.ATTACK
 local CMD_MOVE = CMD.MOVE
@@ -63,6 +66,7 @@ for _, name in ipairs({
 	"tankassault",
 	"tankriot",
 	"tankheavyassault",
+	"tankheavyraid",
 	"slicer",
 	"striderdante",
 }) do
@@ -113,12 +117,14 @@ local function ApplyBoostEffect(unitID)
 			static = true,
 		})
 	end
+	spSetUnitRulesParam(unitID, ACTIVE_RULES_PARAM, 1, INLOS_ACCESS)
 end
 
 local function ClearBoostEffect(unitID)
 	if GG.Attributes then
 		GG.Attributes.RemoveEffect(unitID, GetEffectKey(unitID))
 	end
+	spSetUnitRulesParam(unitID, ACTIVE_RULES_PARAM, 0, INLOS_ACCESS)
 end
 
 local function GetNearbyEnemy(unitID, teamID, searchRange)

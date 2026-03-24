@@ -23,6 +23,7 @@ local PUBLIC_VISIBLE = {public = true}
 local spGetAllyTeamList = Spring.GetAllyTeamList
 local spGetGameFrame = Spring.GetGameFrame
 local spGetGaiaTeamID = Spring.GetGaiaTeamID
+local spGetAIInfo = Spring.GetAIInfo
 local spGetPlayerInfo = Spring.GetPlayerInfo
 local spGetPlayerList = Spring.GetPlayerList
 local spGetTeamInfo = Spring.GetTeamInfo
@@ -96,6 +97,48 @@ local function GetHumanPlayersForAllyTeam(allyTeamID)
 		end
 	end
 	return players
+end
+
+local function GetAllyTeamLabel(allyTeamID)
+	local teamList = spGetTeamList(allyTeamID)
+	local names = {}
+
+	for i = 1, #teamList do
+		local teamID = teamList[i]
+		if teamID ~= spGetGaiaTeamID() then
+			local _, leaderID, _, isAI = spGetTeamInfo(teamID, false)
+			if isAI then
+				local _, aiName, _, shortName = spGetAIInfo(teamID)
+				names[#names + 1] = shortName or aiName or ("AI " .. teamID)
+			else
+				names[#names + 1] = spGetPlayerInfo(leaderID, false) or ("Team " .. teamID)
+			end
+		end
+	end
+
+	if #names == 0 then
+		return string.format("Ally %d", allyTeamID)
+	end
+
+	return string.format("Ally %d | %s", allyTeamID, table.concat(names, ", "))
+end
+
+local function AnnounceResolvedDrafts()
+	if not next(stage.drafts) then
+		return
+	end
+
+	local count = 0
+	for allyTeamID, draft in pairs(stage.drafts) do
+		if draft.resolved and draft.winningCardID then
+			count = count + 1
+			spSetGameRulesParam(PREFIX .. "_announce_" .. allyTeamID .. "_card", draft.winningCardID, PUBLIC_VISIBLE)
+		end
+	end
+	if count > 0 then
+		spSetGameRulesParam(PREFIX .. "_announce_count", count, PUBLIC_VISIBLE)
+		spSetGameRulesParam(PREFIX .. "_announce_seq", spGetGameFrame(), PUBLIC_VISIBLE)
+	end
 end
 
 local function ClearPlayerVote(playerID)
@@ -333,6 +376,8 @@ local function CloseActiveStage()
 			ClearPlayerVote(players[j])
 		end
 	end
+
+	AnnounceResolvedDrafts()
 
 	stage.active = false
 	stage.category = 0
