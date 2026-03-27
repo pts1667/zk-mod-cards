@@ -16,6 +16,7 @@ local CARD_ID = 115
 local UPDATE_FRAMES = 1
 local SWEEP_FRAMES = 30
 local FAST_RELOAD_FRAMES = 2
+local RELOAD_TIME_MULT = 1.25
 local RANGE_FLOOR = 0.01
 local EFFECT_KEY_PREFIX = "zk_cards_point_defense_"
 
@@ -255,6 +256,7 @@ local function ApplyUnitUpdate(unitID, data, gameFrame)
 	local targetReloadSeconds = FAST_RELOAD_FRAMES / Game.gameSpeed
 	local currentReloadTime = spGetUnitWeaponState(unitID, data.mainWeaponNum, "reloadTime") or (data.baseReload / GetExternalReloadMult(unitID))
 	local mainReloadSeconds = currentReloadTime * (data.appliedReloadMult or 1)
+	local rampReloadSeconds = mainReloadSeconds * RELOAD_TIME_MULT
 	local reloadMult = math.max(mainReloadSeconds / targetReloadSeconds, 1)
 
 	local reloadState = spGetUnitWeaponState(unitID, data.mainWeaponNum, "reloadState")
@@ -273,7 +275,7 @@ local function ApplyUnitUpdate(unitID, data, gameFrame)
 	data.initialized = true
 
 	local elapsed = math.max(0, gameFrame - (data.lastShotFrame or gameFrame))
-	local progress = math.min(1, elapsed / math.max(mainReloadSeconds * Game.gameSpeed, 1))
+	local progress = math.min(1, elapsed / math.max(rampReloadSeconds * Game.gameSpeed, 1))
 	local rangeMult = RANGE_FLOOR + (1 - RANGE_FLOOR) * progress
 
 	if GG.Attributes then

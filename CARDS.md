@@ -261,7 +261,7 @@ Category: Good
 
 ### Point Defense
 
-All weapons now reload (almost) instantly. Instead of reloading, weapon range now grows gradually over time (from 1% range mult to 100% range mult), approaching 100% range mult at reload time.
+All weapons now reload (almost) instantly. Instead of reloading, weapon range now grows gradually over time (from 1% range mult to 100% range mult), approaching 100% range mult at 125% of reload time.
 Weapons that stockpile aren't affected.
 Doesn't apply for units with multiple weapons such as Paladin and Dante.
 Associated gadget: `LuaRules/Gadgets/card_point_defense.lua`

@@ -24,8 +24,11 @@ local MIN_MOVED_DISTANCE = 8
 local MAP_REFERENCE_DISTANCE = math.max(Game.mapSizeX or 1, Game.mapSizeZ or 1)
 
 local spGetAllyTeamList = Spring.GetAllyTeamList
+local spGetFeatureDefID = Spring.GetFeatureDefID
+local spGetFeatureResources = Spring.GetFeatureResources
 local spGetGaiaTeamID = Spring.GetGaiaTeamID
 local spGetGameFrame = Spring.GetGameFrame
+local spGetFeaturesInCylinder = Spring.GetFeaturesInCylinder
 local spGetTeamInfo = Spring.GetTeamInfo
 local spGetTeamResources = Spring.GetTeamResources
 local spGetTeamList = Spring.GetTeamList
@@ -34,6 +37,7 @@ local spGetUnitDefID = Spring.GetUnitDefID
 local spGetUnitHealth = Spring.GetUnitHealth
 local spGetUnitPosition = Spring.GetUnitPosition
 local spGetUnitTeam = Spring.GetUnitTeam
+local spSetFeatureResources = Spring.SetFeatureResources
 local spUseTeamResource = Spring.UseTeamResource
 
 local gaiaAllyTeam
@@ -41,6 +45,7 @@ local allyTeamActive = {}
 local trackedUnits = {}
 local builderUnits = {}
 local allyTeamMetalDebt = {}
+local pendingWreckAdjustments = {}
 
 local function GetDiscountKey(unitID)
 	return DISCOUNT_EFFECT_PREFIX .. unitID
@@ -62,6 +67,69 @@ end
 local function IsBuilder(unitDefID)
 	local unitDef = UnitDefs[unitDefID]
 	return unitDef and (unitDef.buildSpeed or 0) > 0
+end
+
+local function GetCorpseFeatureDefs(unitDefID)
+	local featureDefs = {}
+	local corpseName = UnitDefs[unitDefID] and UnitDefs[unitDefID].corpse
+	local corpseDef = corpseName and FeatureDefNames[corpseName]
+	while corpseDef do
+		featureDefs[corpseDef.id] = true
+		corpseDef = corpseDef.deathFeatureID and FeatureDefs[corpseDef.deathFeatureID] or nil
+	end
+	return featureDefs
+end
+
+local function QueueWreckAdjustment(unitID, unitDefID, mult)
+	if not spSetFeatureResources or mult == 1 then
+		return
+	end
+	local x, _, z = spGetUnitPosition(unitID)
+	if not x then
+		return
+	end
+	pendingWreckAdjustments[#pendingWreckAdjustments + 1] = {
+		frame = spGetGameFrame() + 1,
+		x = x,
+		z = z,
+		mult = mult,
+		defs = GetCorpseFeatureDefs(unitDefID),
+	}
+end
+
+local function ApplyPendingWreckAdjustments(frame)
+	if not spSetFeatureResources then
+		return
+	end
+
+	local i = 1
+	while i <= #pendingWreckAdjustments do
+		local adjustment = pendingWreckAdjustments[i]
+		if frame >= adjustment.frame then
+			for _, featureID in ipairs(spGetFeaturesInCylinder(adjustment.x, adjustment.z, 128) or {}) do
+				if adjustment.defs[spGetFeatureDefID(featureID)] then
+					local currentMetal, maxMetal, currentEnergy, maxEnergy, reclaimLeft, reclaimTime = spGetFeatureResources(featureID)
+					if currentMetal and maxMetal and maxMetal > 0 then
+						local metalFraction = currentMetal / maxMetal
+						local newMaxMetal = maxMetal * adjustment.mult
+						spSetFeatureResources(
+							featureID,
+							newMaxMetal * metalFraction,
+							currentEnergy or 0,
+							reclaimTime,
+							reclaimLeft or metalFraction,
+							newMaxMetal,
+							maxEnergy or 0
+						)
+					end
+				end
+			end
+			pendingWreckAdjustments[i] = pendingWreckAdjustments[#pendingWreckAdjustments]
+			pendingWreckAdjustments[#pendingWreckAdjustments] = nil
+		else
+			i = i + 1
+		end
+	end
 end
 
 local function ApplyDiscount(unitID)
@@ -323,7 +391,11 @@ function gadget:UnitCreated(unitID, unitDefID, teamID)
 	TrackUnit(unitID, unitDefID, teamID)
 end
 
-function gadget:UnitDestroyed(unitID)
+function gadget:UnitDestroyed(unitID, unitDefID)
+	local data = trackedUnits[unitID]
+	if data and allyTeamActive[data.allyTeamID] then
+		QueueWreckAdjustment(unitID, unitDefID or data.unitDefID, COST_MULT)
+	end
 	UntrackUnit(unitID)
 end
 
@@ -341,6 +413,7 @@ end
 
 function gadget:GameFrame(frame)
 	UpdateCardActivation()
+	ApplyPendingWreckAdjustments(frame)
 	if frame % FUEL_CHECK_FRAMES == 0 then
 		CheckFuel()
 	end

@@ -2,7 +2,7 @@ return {
 	name = "Zero-K Cards",
 	description = "Spice up Zero-K with an assortment of fun cards.",
 	shortname = "zkcards",
-	version = "v4",
+	version = "v5",
 	mutator = "1",
 	game = "Zero-K",
 	shortGame = "ZK",

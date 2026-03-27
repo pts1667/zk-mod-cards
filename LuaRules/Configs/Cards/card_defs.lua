@@ -131,8 +131,8 @@ local defs = {
 	{
 		id = 115,
 		name = "Point Defense",
-		shortDescription = "Weapons reload almost instantly, but rebuild their range over their original reload cycle. Doesn't apply to some multi-weapon units.",
-		description = "All non-stockpile allied weapons reset to 1% range immediately after firing, then recover smoothly back to full range over their original reload time. Their actual reload is reduced to near-instant while the card is active. Doesn't apply for units with multiple weapons such as Paladin and Dante.",
+		shortDescription = "Weapons reload almost instantly, but rebuild their range over 125% of their original reload cycle. Doesn't apply to some multi-weapon units.",
+		description = "All non-stockpile allied weapons reset to 1% range immediately after firing, then recover smoothly back to full range over 125% of their original reload time. Their actual reload is reduced to near-instant while the card is active. Doesn't apply for units with multiple weapons such as Paladin and Dante.",
 		category = CATEGORY.NEUTRAL,
 		image = "LuaUI/Images/commands/Bold/attack.png",
 		effectType = "point_defense",
