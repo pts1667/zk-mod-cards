@@ -35,6 +35,9 @@ end
 
 local spGetUnitPosition = Spring.GetUnitPosition
 local spGetUnitHealth = Spring.GetUnitHealth
+local spGetGroundHeight = Spring.GetGroundHeight
+local spSetUnitVelocity = Spring.SetUnitVelocity
+local spGetGameFrame = Spring.GetGameFrame
 local GetEffectiveWeaponRange = Spring.Utilities.GetEffectiveWeaponRange
 local IterableMap = VFS.Include("LuaRules/Gadgets/Include/IterableMap.lua")
 
@@ -131,6 +134,10 @@ local spInsertUnitCmdDesc   = Spring.InsertUnitCmdDesc
 local spGetUnitLosState     = Spring.GetUnitLosState
 local spGetUnitIsStunned    = Spring.GetUnitIsStunned
 local spValidUnitID         = Spring.ValidUnitID
+local spMoveCtrlEnable      = Spring.MoveCtrl.Enable
+local spMoveCtrlDisable     = Spring.MoveCtrl.Disable
+local spMoveCtrlSetPosition = Spring.MoveCtrl.SetPosition
+local spMoveCtrlSetVelocity = Spring.MoveCtrl.SetVelocity
 
 local CMD_ATTACK = CMD.ATTACK
 local CMD_INSERT = CMD.INSERT
@@ -183,6 +190,49 @@ local function IsStunnedOrDead(unitID)
 	return (GG.att_ReloadChange[unitID] or 1) == 0
 end
 
+local function DetachImmobileUnit(unitID)
+	local unitDefID = spGetUnitDefID(unitID)
+	local unitDef = unitDefID and UnitDefs[unitDefID]
+	if not (unitDef and unitDef.isImmobile) then
+		return false, nil
+	end
+
+	local x, y, z = spGetUnitPosition(unitID)
+	if not x then
+		return false, nil
+	end
+
+	local groundHeight = spGetGroundHeight(x, z)
+	if y and groundHeight and y <= groundHeight + 1 then
+		spMoveCtrlEnable(unitID)
+		local liftedY = groundHeight + 12
+		spMoveCtrlSetPosition(unitID, x, liftedY, z)
+		return true, liftedY
+	end
+	return true, y
+end
+
+local function IsImmobileUnit(unitID)
+	local unitDefID = spGetUnitDefID(unitID)
+	local unitDef = unitDefID and UnitDefs[unitDefID]
+	return unitDef and unitDef.isImmobile
+end
+
+local function ReleaseImmobileMoveCtrl(unitID, data)
+	if data and data.immobileMoveCtrl then
+		spMoveCtrlSetVelocity(unitID, 0, 0, 0)
+		spMoveCtrlDisable(unitID)
+		data.immobileMoveCtrl = false
+	end
+end
+
+local function GetImmobileArcHeight(startX, startZ, targetX, targetZ)
+	local dx = (targetX or startX) - startX
+	local dz = (targetZ or startZ) - startZ
+	local distance = math.sqrt(dx*dx + dz*dz)
+	return math.max(60, math.min(220, distance * 0.35))
+end
+
 local function SendUnitToTarget(unitID, launchMult, flyTimeMult, sideMult, upMult, odx, ty, odz)
 	if Spring.GetUnitTransporter(unitID) then
 		return false
@@ -196,9 +246,40 @@ local function SendUnitToTarget(unitID, launchMult, flyTimeMult, sideMult, upMul
 	
 	local px, py, pz = odx/flyTime, flyTime*GRAVITY/2 + ndy/flyTime, odz/flyTime
 	local vx, vy, vz = Spring.GetUnitVelocity(unitID)
-	
-	GG.AddGadgetImpulseRaw(unitID, (px - vx)*launchMult*sideMult, (py - vy)*launchMult*upMult, (pz - vz)*launchMult*sideMult, true, true, nil, nil, true)
+
+	local immobileMoveCtrl, liftedY = DetachImmobileUnit(unitID)
+	if immobileMoveCtrl then
+		local startX, _, startZ = spGetUnitPosition(unitID)
+		return flyTime, immobileMoveCtrl, {
+			startFrame = spGetGameFrame(),
+			duration = math.max(1, math.floor(flyTime)),
+			startX = startX,
+			startY = liftedY or ny,
+			startZ = startZ,
+			targetX = startX + odx,
+			targetY = ty,
+			targetZ = startZ + odz,
+			arcHeight = GetImmobileArcHeight(startX, startZ, startX + odx, startZ + odz),
+		}
+	elseif IsImmobileUnit(unitID) then
+		local impulseX = (px - vx)*launchMult*sideMult
+		local impulseY = (py - vy)*launchMult*upMult
+		local impulseZ = (pz - vz)*launchMult*sideMult
+		spSetUnitVelocity(unitID, vx + impulseX, vy + impulseY, vz + impulseZ)
+	else
+		local impulseX = (px - vx)*launchMult*sideMult
+		local impulseY = (py - vy)*launchMult*upMult
+		local impulseZ = (pz - vz)*launchMult*sideMult
+		GG.AddGadgetImpulseRaw(unitID, impulseX, impulseY, impulseZ, true, true, nil, nil, true)
+	end
 	return flyTime
+end
+
+local function GetThrowStartMultipliers(unitID)
+	if IsImmobileUnit(unitID) then
+		return 1, 1
+	end
+	return 0, 1
 end
 
 local function GetAffectedUnits(unitID, checkOverlobAllyTeam, unitX, unitZ)
@@ -314,8 +395,8 @@ function gadget:ProjectileCreated(proID, proOwnerID, weaponDefID)
 		local recentMult = max(0, min(1, (((physicsData and physicsData.drag) or 0) - RECENT_MAX)/RECENT_INT_WIDTH))
 		local speedMult  = max(0, min(1, (SPEED_MAX - speed)/SPEED_INT_WIDTH))
 		local launchMult = speedMult
-		
-		local flyTime = SendUnitToTarget(nearID, launchMult * 0.8, flyTimeMult, 0, 1, odx, ty, odz)
+		local sideMult, upMult = GetThrowStartMultipliers(nearID)
+		local flyTime, immobileMoveCtrl, immobileArc = SendUnitToTarget(nearID, launchMult * 0.8, flyTimeMult, sideMult, upMult, odx, ty, odz)
 		if flyTime then
 			local nearDefID = Spring.GetUnitDefID(nearID)
 			flyTime = flyTime + 15 -- Sideways time.
@@ -332,9 +413,11 @@ function gadget:ProjectileCreated(proID, proOwnerID, weaponDefID)
 					tz = tz,
 					odx = odx,
 					odz = odz,
-					sidewaysCounter = 22,
+					sidewaysCounter = immobileMoveCtrl and nil or 22,
 					launchMult = launchMult,
 					flyTimeMult = flyTimeMult,
+					immobileMoveCtrl = immobileMoveCtrl or false,
+					immobileArc = immobileArc,
 					drag = -1.5,
 					collisionResistence = -5*flyTime/(MIN_FLY_TIME * flyTimeMult),
 				}
@@ -496,6 +579,11 @@ end
 
 function gadget:UnitDestroyed(unitID, unitDefID)
 	IterableMap.Remove(throwUnits, unitID)
+	local physicsData = IterableMap.Get(physicsRestore, unitID)
+	if physicsData then
+		ReleaseImmobileMoveCtrl(unitID, physicsData)
+		IterableMap.Remove(physicsRestore, unitID)
+	end
 	if unitIsNotBlocking[unitID] then
 		local frame = unitIsNotBlocking[unitID]
 		applyBlockingFrame[frame] = applyBlockingFrame[frame] or {}
@@ -543,14 +631,44 @@ local function UpdateTrajectory(unitID, data)
 	if not spValidUnitID(unitID) then
 		return true
 	end
+	if data.immobileMoveCtrl then
+		local arc = data.immobileArc
+		if not arc then
+			ReleaseImmobileMoveCtrl(unitID, data)
+			return true
+		end
+		local progress = (spGetGameFrame() - arc.startFrame) / math.max(1, arc.duration)
+		if progress >= 1 then
+			local groundHeight = spGetGroundHeight(arc.targetX, arc.targetZ) or arc.targetY or 0
+			spMoveCtrlSetPosition(unitID, arc.targetX, math.max(arc.targetY, groundHeight), arc.targetZ)
+			ReleaseImmobileMoveCtrl(unitID, data)
+			GG.SetCollisionDamageMult(unitID)
+			Spring.SetUnitLeaveTracks(unitID, true)
+			SendToUnsynced("removeFlying", unitID)
+			return true
+		end
+		local x = arc.startX + (arc.targetX - arc.startX) * progress
+		local z = arc.startZ + (arc.targetZ - arc.startZ) * progress
+		local linearY = arc.startY + (arc.targetY - arc.startY) * progress
+		local y = linearY + arc.arcHeight * 4 * progress * (1 - progress)
+		spMoveCtrlSetPosition(unitID, x, y, z)
+	end
 	if data.sidewaysCounter then
 		data.sidewaysCounter = data.sidewaysCounter - 1
 		if data.sidewaysCounter < 10 then
 			if IsStunnedOrDead(data.lobID) then
+				ReleaseImmobileMoveCtrl(unitID, data)
 				return true
 			end
-			if not SendUnitToTarget(unitID, data.launchMult*math.min(1, 1 - (data.sidewaysCounter - 3)/5), data.flyTimeMult, 0.9*(1 - data.sidewaysCounter/10), 1, data.odx, data.ty, data.odz) then
+			local flyTime, immobileMoveCtrl, moveCtrlVx, moveCtrlVy, moveCtrlVz = SendUnitToTarget(unitID, data.launchMult*math.min(1, 1 - (data.sidewaysCounter - 3)/5), data.flyTimeMult, 0.9*(1 - data.sidewaysCounter/10), 1, data.odx, data.ty, data.odz)
+			if not flyTime then
 				return true -- remove unit
+			end
+			if immobileMoveCtrl then
+				data.immobileMoveCtrl = true
+				data.moveCtrlVx = moveCtrlVx
+				data.moveCtrlVy = moveCtrlVy
+				data.moveCtrlVz = moveCtrlVz
 			end
 		end
 		if data.sidewaysCounter <= 0 then
@@ -561,6 +679,9 @@ end
 
 local function ReinstatePhysics(unitID, data)
 	GG.PokeDecloakUnit(unitID, data.unitDefID)
+	if data.immobileMoveCtrl then
+		return
+	end
 	if data.drag then
 		SetUnitDrag(unitID, math.max(0, math.min(1, data.drag)))
 		data.drag = data.drag + 0.05
@@ -579,6 +700,7 @@ local function ReinstatePhysics(unitID, data)
 		end
 		data.collisionResistence = data.collisionResistence + 0.066
 		if data.collisionResistence >= 1 then
+			ReleaseImmobileMoveCtrl(unitID, data)
 			GG.SetCollisionDamageMult(unitID)
 			SendToUnsynced("removeFlying", unitID)
 			return true -- remove unit

@@ -27,8 +27,12 @@ local MAP_REFERENCE_DISTANCE = math.max(Game.mapSizeX or 1, Game.mapSizeZ or 1)
 local ALLIED_VISIBLE = {allied = true}
 
 local spGetAllyTeamList = Spring.GetAllyTeamList
+local spCreateFeature = Spring.CreateFeature
+local spDestroyFeature = Spring.DestroyFeature
 local spGetFeatureDefID = Spring.GetFeatureDefID
+local spGetFeaturePosition = Spring.GetFeaturePosition
 local spGetFeatureResources = Spring.GetFeatureResources
+local spGetFeatureTeam = Spring.GetFeatureTeam
 local spGetGaiaTeamID = Spring.GetGaiaTeamID
 local spGetGameFrame = Spring.GetGameFrame
 local spGetFeaturesInCylinder = Spring.GetFeaturesInCylinder
@@ -44,6 +48,7 @@ local spGiveOrderToUnit = Spring.GiveOrderToUnit
 local spSetFeatureResources = Spring.SetFeatureResources
 local spSetTeamRulesParam = Spring.SetTeamRulesParam
 local spUseTeamResource = Spring.UseTeamResource
+local spTransferFeature = Spring.TransferFeature
 
 local gaiaAllyTeam
 local allyTeamActive = {}
@@ -51,6 +56,10 @@ local trackedUnits = {}
 local builderUnits = {}
 local allyTeamMetalDebt = {}
 local pendingWreckAdjustments = {}
+local replacedFeatures = {}
+local replacingFeatures = {}
+local WRECK_MATCH_RADIUS = 24
+local WRECK_MATCH_TTL = 30
 
 local function GetDiscountKey(unitID)
 	return DISCOUNT_EFFECT_PREFIX .. unitID
@@ -85,6 +94,17 @@ local function GetCorpseFeatureDefs(unitDefID)
 	return featureDefs
 end
 
+local function GetDeathFeatureDefs(featureDefID)
+	local featureDefs = {}
+	local corpseDef = featureDefID and FeatureDefs[featureDefID]
+	corpseDef = corpseDef and corpseDef.deathFeatureID and FeatureDefs[corpseDef.deathFeatureID] or nil
+	while corpseDef do
+		featureDefs[corpseDef.id] = true
+		corpseDef = corpseDef.deathFeatureID and FeatureDefs[corpseDef.deathFeatureID] or nil
+	end
+	return featureDefs
+end
+
 local function QueueWreckAdjustment(unitID, unitDefID, mult)
 	if not spSetFeatureResources or mult == 1 then
 		return
@@ -94,7 +114,8 @@ local function QueueWreckAdjustment(unitID, unitDefID, mult)
 		return
 	end
 	pendingWreckAdjustments[#pendingWreckAdjustments + 1] = {
-		frame = spGetGameFrame() + 1,
+		frame = spGetGameFrame(),
+		expireFrame = spGetGameFrame() + WRECK_MATCH_TTL,
 		x = x,
 		z = z,
 		mult = mult,
@@ -102,23 +123,42 @@ local function QueueWreckAdjustment(unitID, unitDefID, mult)
 	}
 end
 
-local function ApplyPendingWreckAdjustments(frame)
-	if not spSetFeatureResources then
-		return
-	end
-
+local function CleanupExpiredPendingWreckAdjustments(frame)
 	local i = 1
 	while i <= #pendingWreckAdjustments do
 		local adjustment = pendingWreckAdjustments[i]
-		if frame >= adjustment.frame then
-			for _, featureID in ipairs(spGetFeaturesInCylinder(adjustment.x, adjustment.z, 128) or {}) do
-				if adjustment.defs[spGetFeatureDefID(featureID)] then
-					local currentMetal, maxMetal, currentEnergy, maxEnergy, reclaimLeft, reclaimTime = spGetFeatureResources(featureID)
-					if currentMetal and maxMetal and maxMetal > 0 then
-						local metalFraction = currentMetal / maxMetal
-						local newMaxMetal = maxMetal * adjustment.mult
+		if frame > adjustment.expireFrame then
+			pendingWreckAdjustments[i] = pendingWreckAdjustments[#pendingWreckAdjustments]
+			pendingWreckAdjustments[#pendingWreckAdjustments] = nil
+		else
+			i = i + 1
+		end
+	end
+end
+
+local function TryApplyWreckAdjustment(featureID, allyTeam)
+	local featureDefID = spGetFeatureDefID(featureID)
+	local x, y, z = spGetFeaturePosition(featureID)
+	local teamID = spGetFeatureTeam(featureID)
+	if not (featureDefID and x and teamID) then
+		return
+	end
+
+	for i = 1, #pendingWreckAdjustments do
+		local adjustment = pendingWreckAdjustments[i]
+		if adjustment.defs[featureDefID] then
+			local dx = x - adjustment.x
+			local dz = z - adjustment.z
+			if dx * dx + dz * dz <= WRECK_MATCH_RADIUS * WRECK_MATCH_RADIUS then
+				local currentMetal, maxMetal, currentEnergy, maxEnergy, reclaimLeft, reclaimTime = spGetFeatureResources(featureID)
+				if currentMetal and maxMetal and maxMetal > 0 then
+					local metalFraction = currentMetal / maxMetal
+					local newMaxMetal = maxMetal * adjustment.mult
+					local newFeatureID = spCreateFeature(featureDefID, x, y, z, 0, allyTeam)
+					if newFeatureID then
+						spTransferFeature(newFeatureID, teamID)
 						spSetFeatureResources(
-							featureID,
+							newFeatureID,
 							newMaxMetal * metalFraction,
 							currentEnergy or 0,
 							reclaimTime,
@@ -126,15 +166,55 @@ local function ApplyPendingWreckAdjustments(frame)
 							newMaxMetal,
 							maxEnergy or 0
 						)
+						replacedFeatures[newFeatureID] = {
+							mult = adjustment.mult,
+							featureDefID = featureDefID,
+							x = x,
+							z = z,
+						}
+						replacingFeatures[featureID] = true
+						spDestroyFeature(featureID)
 					end
 				end
+				pendingWreckAdjustments[i] = pendingWreckAdjustments[#pendingWreckAdjustments]
+				pendingWreckAdjustments[#pendingWreckAdjustments] = nil
+				return
 			end
-			pendingWreckAdjustments[i] = pendingWreckAdjustments[#pendingWreckAdjustments]
-			pendingWreckAdjustments[#pendingWreckAdjustments] = nil
-		else
-			i = i + 1
 		end
 	end
+end
+
+function gadget:FeatureCreated(featureID, allyTeam)
+	if replacingFeatures[featureID] or replacedFeatures[featureID] then
+		return
+	end
+	TryApplyWreckAdjustment(featureID, allyTeam)
+end
+
+function gadget:FeatureDestroyed(featureID)
+	if replacingFeatures[featureID] then
+		replacingFeatures[featureID] = nil
+		return
+	end
+	local data = replacedFeatures[featureID]
+	if not data then
+		return
+	end
+	replacedFeatures[featureID] = nil
+
+	local defs = GetDeathFeatureDefs(data.featureDefID)
+	if not next(defs) then
+		return
+	end
+
+	pendingWreckAdjustments[#pendingWreckAdjustments + 1] = {
+		frame = spGetGameFrame(),
+		expireFrame = spGetGameFrame() + WRECK_MATCH_TTL,
+		x = data.x,
+		z = data.z,
+		mult = data.mult,
+		defs = defs,
+	}
 end
 
 local function ApplyDiscount(unitID)
@@ -440,7 +520,7 @@ end
 
 function gadget:GameFrame(frame)
 	UpdateCardActivation()
-	ApplyPendingWreckAdjustments(frame)
+	CleanupExpiredPendingWreckAdjustments(frame)
 	if frame % FUEL_CHECK_FRAMES == 0 then
 		CheckFuel()
 	end

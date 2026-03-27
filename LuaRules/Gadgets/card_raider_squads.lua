@@ -13,7 +13,6 @@ if not gadgetHandler:IsSyncedCode() then
 end
 
 local CARD_ID = 201
-local MINI_HEALTH_MULT = 0.25
 local MINI_COST_MULT = 0.2
 local MINI_SCALE = 0.4
 local DEATH_FEATURE_RADIUS = 96
@@ -98,10 +97,11 @@ local function GetCorpseFeatureDefs(unitDefID)
 	return featureDefs
 end
 
-local function ApplyMiniVisuals(unitID)
+local function ApplyMiniVisuals(unitID, unitDefID)
+	local baseMaxHealth = UnitDefs[unitDefID] and UnitDefs[unitDefID].health or 1
 	if GG.Attributes then
 		GG.Attributes.AddEffect(unitID, MINI_EFFECT_KEY, {
-			healthMult = MINI_HEALTH_MULT,
+			healthAdd = 1 - baseMaxHealth,
 			cost = MINI_COST_MULT,
 			static = true,
 		})
@@ -154,7 +154,7 @@ local function CreateMiniSquad(unitID, unitDefID, teamID)
 			miniUnits[miniID] = {
 				unitDefID = unitDefID,
 			}
-			ApplyMiniVisuals(miniID)
+			ApplyMiniVisuals(miniID, unitDefID)
 		end
 	end
 	spawningMiniUnits = false

@@ -18,7 +18,7 @@ Category: Neutral
 
 ### Raider Squads
 
-Raiders, when built, split into 5 miniature units with 25% max HP and 40% unit size each.
+Raiders, when built, split into 5 miniature units with 1 max HP, 40% unit size, and 20% value each.
 Raiders can't be reclaimed, and leave no reclaimable metal debris on death.
 Category: Good
 
@@ -42,8 +42,8 @@ Category: Good
 
 ### Energy Overload
 
-Singularity reactors begin to decay (lose HP) at a rate of 2.5% max HP per second.
-The rate of decay increases, to around 25% max HP per second 20 minutes after the reactor has been built.
+Singularity reactors begin to decay (lose HP) at a rate of 1% max HP per second.
+The rate of decay increases, to around 5% max HP per second 20 minutes after the reactor has been built.
 Singularity reactors produce 100% extra energy to 400% extra energy after 20 minutes.
 Category: Neutral
 

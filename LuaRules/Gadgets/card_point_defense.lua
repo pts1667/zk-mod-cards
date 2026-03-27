@@ -22,13 +22,13 @@ local EFFECT_KEY_PREFIX = "zk_cards_point_defense_"
 
 local spGetAllyTeamList = Spring.GetAllyTeamList
 local spGetGaiaTeamID = Spring.GetGaiaTeamID
+local spGetGameFrame = Spring.GetGameFrame
 local spGetTeamInfo = Spring.GetTeamInfo
 local spGetTeamList = Spring.GetTeamList
 local spGetTeamUnits = Spring.GetTeamUnits
 local spGetUnitDefID = Spring.GetUnitDefID
 local spGetUnitRulesParam = Spring.GetUnitRulesParam
 local spGetUnitTeam = Spring.GetUnitTeam
-local spGetUnitWeaponState = Spring.GetUnitWeaponState
 
 local gaiaAllyTeam
 local allyTeamActive = {}
@@ -69,6 +69,10 @@ end
 
 local function GetEffectKey(unitID)
 	return EFFECT_KEY_PREFIX .. unitID
+end
+
+local function IsFiniteNumber(value)
+	return type(value) == "number" and value == value and value > -math.huge and value < math.huge
 end
 
 local function IsHelperWeaponDef(defName, weaponDef)
@@ -142,6 +146,20 @@ local function GetWeaponPriority(unitDef, weaponNum, weaponDef)
 	return score
 end
 
+local function GetWeaponHoldFrames(weaponDef)
+	if not weaponDef then
+		return 0
+	end
+
+	local beamTime = tonumber(weaponDef.beamTime or weaponDef.beamtime) or 0
+	local beamTtl = tonumber(weaponDef.beamttl) or 0
+	local holdFrames = math.max(beamTime * Game.gameSpeed, beamTtl)
+	if not IsFiniteNumber(holdFrames) or holdFrames <= 0 then
+		return 0
+	end
+	return math.ceil(holdFrames)
+end
+
 local function UpdateCardActivation()
 	if not (GG.ZKCards and GG.ZKCards.HasAppliedCard) then
 		return
@@ -169,7 +187,9 @@ local function GetMainWeaponData(unitDefID)
 		if weaponDef and (weaponDef.range or 0) > 0 and (weaponDef.reload or 0) > 0 then
 			return {
 				mainWeaponNum = forcedWeaponNum,
+				mainWeaponDefID = weaponDefID,
 				baseReload = weaponDef.reload,
+				holdFrames = GetWeaponHoldFrames(weaponDef),
 			}
 		end
 	end
@@ -197,15 +217,19 @@ local function GetMainWeaponData(unitDefID)
 	end
 
 	if bestCandidate then
-		return {
-			mainWeaponNum = bestCandidate.mainWeaponNum,
-			baseReload = bestCandidate.baseReload,
-		}
+			return {
+				mainWeaponNum = bestCandidate.mainWeaponNum,
+				mainWeaponDefID = unitDef.weapons[bestCandidate.mainWeaponNum].weaponDef,
+				baseReload = bestCandidate.baseReload,
+				holdFrames = GetWeaponHoldFrames(WeaponDefs[unitDef.weapons[bestCandidate.mainWeaponNum].weaponDef]),
+			}
 	end
 	if bestFallback then
 		return {
 			mainWeaponNum = bestFallback.mainWeaponNum,
+			mainWeaponDefID = unitDef.weapons[bestFallback.mainWeaponNum].weaponDef,
 			baseReload = bestFallback.baseReload,
+			holdFrames = GetWeaponHoldFrames(WeaponDefs[unitDef.weapons[bestFallback.mainWeaponNum].weaponDef]),
 		}
 	end
 
@@ -222,12 +246,11 @@ local function SweepAllyTeam(allyTeamID)
 					trackedUnits[unitID] = {
 						unitDefID = unitDefID,
 						mainWeaponNum = weaponData.mainWeaponNum,
+						mainWeaponDefID = weaponData.mainWeaponDefID,
 						baseReload = weaponData.baseReload,
+						holdFrames = weaponData.holdFrames or 0,
 						appliedReloadMult = false,
-						lastReloadState = false,
 						lastShotFrame = false,
-						wasReady = false,
-						initialized = false,
 					}
 				end
 			end
@@ -241,9 +264,23 @@ local function RemoveUnitEffect(unitID)
 	end
 end
 
-local function GetExternalReloadMult(unitID)
+local function GetExternalReloadMult(unitID, ownReloadMult)
 	local totalReloadMult = spGetUnitRulesParam(unitID, "totalReloadSpeedChange") or 1
-	return math.max(totalReloadMult, 0.0001)
+	if not IsFiniteNumber(totalReloadMult) or totalReloadMult <= 0 then
+		totalReloadMult = 1
+	end
+
+	local appliedReloadMult = ownReloadMult
+	if not IsFiniteNumber(appliedReloadMult) or appliedReloadMult <= 0 then
+		appliedReloadMult = 1
+	end
+
+	local externalReloadMult = totalReloadMult / appliedReloadMult
+	if not IsFiniteNumber(externalReloadMult) or externalReloadMult <= 0 then
+		externalReloadMult = 1
+	end
+
+	return math.max(externalReloadMult, 0.0001)
 end
 
 local function RestoreUnit(unitID, data)
@@ -254,29 +291,36 @@ end
 
 local function ApplyUnitUpdate(unitID, data, gameFrame)
 	local targetReloadSeconds = FAST_RELOAD_FRAMES / Game.gameSpeed
-	local currentReloadTime = spGetUnitWeaponState(unitID, data.mainWeaponNum, "reloadTime") or (data.baseReload / GetExternalReloadMult(unitID))
-	local mainReloadSeconds = currentReloadTime * (data.appliedReloadMult or 1)
-	local rampReloadSeconds = mainReloadSeconds * RELOAD_TIME_MULT
-	local reloadMult = math.max(mainReloadSeconds / targetReloadSeconds, 1)
-
-	local reloadState = spGetUnitWeaponState(unitID, data.mainWeaponNum, "reloadState")
-	if reloadState then
-		local isReady = reloadState <= gameFrame + 0.5
-		if data.lastReloadState and reloadState > data.lastReloadState + 0.5 then
-			data.lastShotFrame = gameFrame
-		elseif data.wasReady and not isReady then
-			data.lastShotFrame = gameFrame
-		elseif not data.initialized then
-			data.lastShotFrame = gameFrame
-		end
-		data.wasReady = isReady
-		data.lastReloadState = reloadState
+	local fallbackReloadSeconds = data.baseReload / GetExternalReloadMult(unitID, data.appliedReloadMult)
+	local mainReloadSeconds = fallbackReloadSeconds
+	if not IsFiniteNumber(mainReloadSeconds) or mainReloadSeconds <= 0 then
+		mainReloadSeconds = fallbackReloadSeconds
 	end
-	data.initialized = true
+	local rampReloadSeconds = mainReloadSeconds * RELOAD_TIME_MULT
+	if not IsFiniteNumber(rampReloadSeconds) or rampReloadSeconds <= 0 then
+		rampReloadSeconds = fallbackReloadSeconds * RELOAD_TIME_MULT
+	end
+	local reloadMult = math.max(mainReloadSeconds / targetReloadSeconds, 1)
+	if not IsFiniteNumber(reloadMult) or reloadMult <= 0 then
+		reloadMult = 1
+	end
 
-	local elapsed = math.max(0, gameFrame - (data.lastShotFrame or gameFrame))
-	local progress = math.min(1, elapsed / math.max(rampReloadSeconds * Game.gameSpeed, 1))
-	local rangeMult = RANGE_FLOOR + (1 - RANGE_FLOOR) * progress
+	if not data.lastShotFrame then
+		data.lastShotFrame = gameFrame - math.ceil(math.max(rampReloadSeconds * Game.gameSpeed, 1))
+	end
+
+	local shotResetFrame = (data.lastShotFrame or gameFrame) + (data.holdFrames or 0)
+	local rangeMult
+	if gameFrame < shotResetFrame then
+		rangeMult = 1
+	else
+		local elapsed = math.max(0, gameFrame - shotResetFrame)
+		local progress = math.min(1, elapsed / math.max(rampReloadSeconds * Game.gameSpeed, 1))
+		rangeMult = RANGE_FLOOR + (1 - RANGE_FLOOR) * progress
+	end
+	if not IsFiniteNumber(rangeMult) or rangeMult <= 0 then
+		rangeMult = 1
+	end
 
 	if GG.Attributes then
 		GG.Attributes.AddEffect(unitID, GetEffectKey(unitID), {
@@ -297,14 +341,28 @@ local function TrackUnit(unitID, unitDefID)
 		trackedUnits[unitID] = {
 			unitDefID = unitDefID,
 			mainWeaponNum = weaponData.mainWeaponNum,
+			mainWeaponDefID = weaponData.mainWeaponDefID,
 			baseReload = weaponData.baseReload,
+			holdFrames = weaponData.holdFrames or 0,
 			appliedReloadMult = false,
-			lastReloadState = false,
 			lastShotFrame = false,
-			wasReady = false,
-			initialized = false,
 		}
 	end
+end
+
+function gadget:ScriptFireWeapon(unitID, unitDefID, weaponNum)
+	local data = trackedUnits[unitID]
+	if not data or unitDefID ~= data.unitDefID or weaponNum ~= data.mainWeaponNum then
+		return
+	end
+
+	local teamID = spGetUnitTeam(unitID)
+	local allyTeamID = GetTeamAllyTeam(teamID)
+	if not allyTeamActive[allyTeamID] then
+		return
+	end
+
+	data.lastShotFrame = spGetGameFrame()
 end
 
 function gadget:UnitCreated(unitID, unitDefID)

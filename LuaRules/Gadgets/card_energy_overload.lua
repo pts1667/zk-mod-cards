@@ -16,8 +16,8 @@ local CARD_ID = 103
 local SINGU_DEF_ID = UnitDefNames.energysingu and UnitDefNames.energysingu.id
 local UPDATE_FRAMES = 15
 local RAMP_FRAMES = 20 * 60 * Game.gameSpeed
-local MIN_DECAY_PER_SECOND = 0.025
-local MAX_DECAY_PER_SECOND = 0.25
+local MIN_DECAY_PER_SECOND = 0.01
+local MAX_DECAY_PER_SECOND = 0.05
 local MIN_ENERGY_MULT = 2.0
 local MAX_ENERGY_MULT = 5.0
 
