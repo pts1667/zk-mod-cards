@@ -14,14 +14,17 @@ end
 
 local CARD_ID = 102
 local DISCOUNT_EFFECT_PREFIX = "zk_cards_metal_fuel_discount_"
-local STALL_EFFECT_PREFIX = "zk_cards_metal_fuel_stall_"
+local DEBT_LOCK_EFFECT_PREFIX = "zk_cards_metal_fuel_debt_lock_"
 local BUILD_STALL_EFFECT_PREFIX = "zk_cards_metal_fuel_build_stall_"
+local TEAM_DEBT_RULES_PARAM = "zk_cards_metal_fuel_debt"
 local COST_MULT = 0.1
-local STALL_MOVE_MULT = 0.1
+local DEBT_MOVE_MULT = 0
+local DEBT_RELOAD_MULT = 0.25
 local FUEL_CHECK_FRAMES = 3 * Game.gameSpeed
 local MAP_TRAVERSE_FUEL_RATIO = 0.50
 local MIN_MOVED_DISTANCE = 8
 local MAP_REFERENCE_DISTANCE = math.max(Game.mapSizeX or 1, Game.mapSizeZ or 1)
+local ALLIED_VISIBLE = {allied = true}
 
 local spGetAllyTeamList = Spring.GetAllyTeamList
 local spGetFeatureDefID = Spring.GetFeatureDefID
@@ -37,7 +40,9 @@ local spGetUnitDefID = Spring.GetUnitDefID
 local spGetUnitHealth = Spring.GetUnitHealth
 local spGetUnitPosition = Spring.GetUnitPosition
 local spGetUnitTeam = Spring.GetUnitTeam
+local spGiveOrderToUnit = Spring.GiveOrderToUnit
 local spSetFeatureResources = Spring.SetFeatureResources
+local spSetTeamRulesParam = Spring.SetTeamRulesParam
 local spUseTeamResource = Spring.UseTeamResource
 
 local gaiaAllyTeam
@@ -51,8 +56,8 @@ local function GetDiscountKey(unitID)
 	return DISCOUNT_EFFECT_PREFIX .. unitID
 end
 
-local function GetStallKey(unitID)
-	return STALL_EFFECT_PREFIX .. unitID
+local function GetDebtLockKey(unitID)
+	return DEBT_LOCK_EFFECT_PREFIX .. unitID
 end
 
 local function GetBuildStallKey(unitID)
@@ -147,16 +152,18 @@ local function RemoveDiscount(unitID)
 	end
 end
 
-local function SetStalled(unitID, stalled)
+local function SetDebtLocked(unitID, locked)
 	if not GG.Attributes then
 		return
 	end
-	if stalled then
-		GG.Attributes.AddEffect(unitID, GetStallKey(unitID), {
-			move = STALL_MOVE_MULT,
+	if locked then
+		GG.Attributes.AddEffect(unitID, GetDebtLockKey(unitID), {
+			move = DEBT_MOVE_MULT,
+			reload = DEBT_RELOAD_MULT,
 		})
+		spGiveOrderToUnit(unitID, CMD.STOP, {}, 0)
 	else
-		GG.Attributes.RemoveEffect(unitID, GetStallKey(unitID))
+		GG.Attributes.RemoveEffect(unitID, GetDebtLockKey(unitID))
 	end
 end
 
@@ -216,7 +223,7 @@ end
 local function TrackMobile(unitID, unitDefID, teamID)
 	if not IsEligibleMobile(unitDefID) then
 		RemoveDiscount(unitID)
-		SetStalled(unitID, false)
+		SetDebtLocked(unitID, false)
 		trackedUnits[unitID] = nil
 		return
 	end
@@ -224,7 +231,7 @@ local function TrackMobile(unitID, unitDefID, teamID)
 	local allyTeamID = select(6, spGetTeamInfo(teamID, false))
 	if allyTeamID == gaiaAllyTeam then
 		RemoveDiscount(unitID)
-		SetStalled(unitID, false)
+		SetDebtLocked(unitID, false)
 		trackedUnits[unitID] = nil
 		return
 	end
@@ -244,9 +251,10 @@ local function TrackMobile(unitID, unitDefID, teamID)
 
 	if allyTeamActive[allyTeamID] then
 		ApplyDiscount(unitID)
+		SetDebtLocked(unitID, (allyTeamMetalDebt[allyTeamID] or 0) > 0)
 	else
 		RemoveDiscount(unitID)
-		SetStalled(unitID, false)
+		SetDebtLocked(unitID, false)
 	end
 end
 
@@ -260,7 +268,7 @@ end
 
 local function UntrackUnit(unitID)
 	RemoveDiscount(unitID)
-	SetStalled(unitID, false)
+	SetDebtLocked(unitID, false)
 	SetBuildStalled(unitID, false)
 	trackedUnits[unitID] = nil
 	builderUnits[unitID] = nil
@@ -289,12 +297,34 @@ local function SetAllyTeamBuildStalled(allyTeamID, stalled)
 	end
 end
 
+local function SetAllyTeamDebtRulesParam(allyTeamID, debt)
+	for _, teamID in ipairs(spGetTeamList(allyTeamID) or {}) do
+		spSetTeamRulesParam(teamID, TEAM_DEBT_RULES_PARAM, debt or 0, ALLIED_VISIBLE)
+	end
+end
+
+local function SetAllyTeamDebtLocked(allyTeamID, locked)
+	for unitID, data in pairs(trackedUnits) do
+		if data.allyTeamID == allyTeamID then
+			SetDebtLocked(unitID, locked)
+		end
+	end
+end
+
+local function UpdateAllyTeamDebtState(allyTeamID)
+	local debt = allyTeamMetalDebt[allyTeamID] or 0
+	local locked = debt > 0
+	SetAllyTeamDebtRulesParam(allyTeamID, debt)
+	SetAllyTeamBuildStalled(allyTeamID, locked)
+	SetAllyTeamDebtLocked(allyTeamID, locked)
+end
+
 local function AddMetalDebt(allyTeamID, amount)
 	if amount <= 0 then
 		return
 	end
 	allyTeamMetalDebt[allyTeamID] = (allyTeamMetalDebt[allyTeamID] or 0) + amount
-	SetAllyTeamBuildStalled(allyTeamID, true)
+	UpdateAllyTeamDebtState(allyTeamID)
 end
 
 local function RepayMetalDebtForTeam(teamID, allyTeamID)
@@ -311,10 +341,10 @@ local function RepayMetalDebtForTeam(teamID, allyTeamID)
 
 	if debt <= 0.0001 then
 		allyTeamMetalDebt[allyTeamID] = nil
-		SetAllyTeamBuildStalled(allyTeamID, false)
 	else
 		allyTeamMetalDebt[allyTeamID] = debt
 	end
+	UpdateAllyTeamDebtState(allyTeamID)
 end
 
 local function UpdateCardActivation()
@@ -328,6 +358,7 @@ local function UpdateCardActivation()
 		if not allyTeamActive[allyTeamID] and GG.ZKCards.HasAppliedCard(allyTeamID, CARD_ID) then
 			allyTeamActive[allyTeamID] = true
 			SweepUnitsForAllyTeam(allyTeamID)
+			UpdateAllyTeamDebtState(allyTeamID)
 		end
 	end
 end
@@ -364,23 +395,19 @@ local function CheckFuel()
 							paid = immediatePayment
 						end
 						if paid >= requiredMetal then
-							SetStalled(unitID, false)
 						else
-							SetStalled(unitID, true)
 							AddMetalDebt(data.allyTeamID, requiredMetal - paid)
 						end
-					else
-						SetStalled(unitID, false)
 					end
-				else
-					SetStalled(unitID, false)
 				end
 				data.lastX = x
 				data.lastZ = z
 				if allyTeamActive[data.allyTeamID] then
 					ApplyDiscount(unitID)
+					SetDebtLocked(unitID, (allyTeamMetalDebt[data.allyTeamID] or 0) > 0)
 				else
 					RemoveDiscount(unitID)
+					SetDebtLocked(unitID, false)
 				end
 			end
 		end
@@ -422,4 +449,7 @@ end
 function gadget:Initialize()
 	gaiaAllyTeam = select(6, spGetTeamInfo(spGetGaiaTeamID(), false))
 	UpdateCardActivation()
+	for _, allyTeamID in ipairs(GetLivingAllyTeams()) do
+		SetAllyTeamDebtRulesParam(allyTeamID, allyTeamMetalDebt[allyTeamID] or 0)
+	end
 end
