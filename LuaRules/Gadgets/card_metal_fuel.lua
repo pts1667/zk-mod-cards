@@ -15,6 +15,7 @@ end
 local CARD_ID = 102
 local DISCOUNT_EFFECT_PREFIX = "zk_cards_metal_fuel_discount_"
 local STALL_EFFECT_PREFIX = "zk_cards_metal_fuel_stall_"
+local BUILD_STALL_EFFECT_PREFIX = "zk_cards_metal_fuel_build_stall_"
 local COST_MULT = 0.1
 local STALL_MOVE_MULT = 0.1
 local FUEL_CHECK_FRAMES = 3 * Game.gameSpeed
@@ -25,8 +26,8 @@ local MAP_REFERENCE_DISTANCE = math.max(Game.mapSizeX or 1, Game.mapSizeZ or 1)
 local spGetAllyTeamList = Spring.GetAllyTeamList
 local spGetGaiaTeamID = Spring.GetGaiaTeamID
 local spGetGameFrame = Spring.GetGameFrame
-local spGetGroundHeight = Spring.GetGroundHeight
 local spGetTeamInfo = Spring.GetTeamInfo
+local spGetTeamResources = Spring.GetTeamResources
 local spGetTeamList = Spring.GetTeamList
 local spGetTeamUnits = Spring.GetTeamUnits
 local spGetUnitDefID = Spring.GetUnitDefID
@@ -38,6 +39,8 @@ local spUseTeamResource = Spring.UseTeamResource
 local gaiaAllyTeam
 local allyTeamActive = {}
 local trackedUnits = {}
+local builderUnits = {}
+local allyTeamMetalDebt = {}
 
 local function GetDiscountKey(unitID)
 	return DISCOUNT_EFFECT_PREFIX .. unitID
@@ -47,9 +50,18 @@ local function GetStallKey(unitID)
 	return STALL_EFFECT_PREFIX .. unitID
 end
 
+local function GetBuildStallKey(unitID)
+	return BUILD_STALL_EFFECT_PREFIX .. unitID
+end
+
 local function IsEligibleMobile(unitDefID)
 	local unitDef = UnitDefs[unitDefID]
 	return unitDef and (unitDef.speed or 0) > 0
+end
+
+local function IsBuilder(unitDefID)
+	local unitDef = UnitDefs[unitDefID]
+	return unitDef and (unitDef.buildSpeed or 0) > 0
 end
 
 local function ApplyDiscount(unitID)
@@ -80,6 +92,20 @@ local function SetStalled(unitID, stalled)
 	end
 end
 
+local function SetBuildStalled(unitID, stalled)
+	if not GG.Attributes then
+		return
+	end
+	if stalled then
+		GG.Attributes.AddEffect(unitID, GetBuildStallKey(unitID), {
+			build = 0,
+			static = true,
+		})
+	else
+		GG.Attributes.RemoveEffect(unitID, GetBuildStallKey(unitID))
+	end
+end
+
 local function GetLivingAllyTeams()
 	local allyTeams = {}
 	local rawAllyTeams = spGetAllyTeamList()
@@ -99,13 +125,39 @@ local function GetLivingAllyTeams()
 	return allyTeams
 end
 
-local function TrackUnit(unitID, unitDefID, teamID)
-	if not IsEligibleMobile(unitDefID) then
+local function TrackBuilder(unitID, unitDefID, teamID)
+	if not IsBuilder(unitDefID) then
+		SetBuildStalled(unitID, false)
+		builderUnits[unitID] = nil
 		return
 	end
 
 	local allyTeamID = select(6, spGetTeamInfo(teamID, false))
 	if allyTeamID == gaiaAllyTeam then
+		SetBuildStalled(unitID, false)
+		builderUnits[unitID] = nil
+		return
+	end
+
+	builderUnits[unitID] = {
+		allyTeamID = allyTeamID,
+	}
+	SetBuildStalled(unitID, allyTeamActive[allyTeamID] and (allyTeamMetalDebt[allyTeamID] or 0) > 0)
+end
+
+local function TrackMobile(unitID, unitDefID, teamID)
+	if not IsEligibleMobile(unitDefID) then
+		RemoveDiscount(unitID)
+		SetStalled(unitID, false)
+		trackedUnits[unitID] = nil
+		return
+	end
+
+	local allyTeamID = select(6, spGetTeamInfo(teamID, false))
+	if allyTeamID == gaiaAllyTeam then
+		RemoveDiscount(unitID)
+		SetStalled(unitID, false)
+		trackedUnits[unitID] = nil
 		return
 	end
 
@@ -130,10 +182,20 @@ local function TrackUnit(unitID, unitDefID, teamID)
 	end
 end
 
+local function TrackUnit(unitID, unitDefID, teamID)
+	if not unitDefID or not teamID then
+		return
+	end
+	TrackMobile(unitID, unitDefID, teamID)
+	TrackBuilder(unitID, unitDefID, teamID)
+end
+
 local function UntrackUnit(unitID)
 	RemoveDiscount(unitID)
 	SetStalled(unitID, false)
+	SetBuildStalled(unitID, false)
 	trackedUnits[unitID] = nil
+	builderUnits[unitID] = nil
 end
 
 local function SweepUnitsForAllyTeam(allyTeamID)
@@ -148,6 +210,42 @@ local function SweepUnitsForAllyTeam(allyTeamID)
 				TrackUnit(unitID, unitDefID, teamID)
 			end
 		end
+	end
+end
+
+local function SetAllyTeamBuildStalled(allyTeamID, stalled)
+	for unitID, data in pairs(builderUnits) do
+		if data.allyTeamID == allyTeamID then
+			SetBuildStalled(unitID, stalled)
+		end
+	end
+end
+
+local function AddMetalDebt(allyTeamID, amount)
+	if amount <= 0 then
+		return
+	end
+	allyTeamMetalDebt[allyTeamID] = (allyTeamMetalDebt[allyTeamID] or 0) + amount
+	SetAllyTeamBuildStalled(allyTeamID, true)
+end
+
+local function RepayMetalDebtForTeam(teamID, allyTeamID)
+	local debt = allyTeamMetalDebt[allyTeamID] or 0
+	if debt <= 0 then
+		return
+	end
+
+	local currentMetal = spGetTeamResources(teamID, "metal") or 0
+	local payment = math.min(currentMetal, debt)
+	if payment > 0 and spUseTeamResource(teamID, "metal", payment) then
+		debt = debt - payment
+	end
+
+	if debt <= 0.0001 then
+		allyTeamMetalDebt[allyTeamID] = nil
+		SetAllyTeamBuildStalled(allyTeamID, false)
+	else
+		allyTeamMetalDebt[allyTeamID] = debt
 	end
 end
 
@@ -180,6 +278,9 @@ local function CheckFuel()
 			if not x then
 				UntrackUnit(unitID)
 			else
+				if allyTeamActive[data.allyTeamID] then
+					RepayMetalDebtForTeam(teamID, data.allyTeamID)
+				end
 				local dx = x - data.lastX
 				local dz = z - data.lastZ
 				local movedDistance = math.sqrt(dx * dx + dz * dz)
@@ -187,10 +288,21 @@ local function CheckFuel()
 				if allyTeamActive[data.allyTeamID] and buildProgress == 1 and movedDistance >= MIN_MOVED_DISTANCE then
 					local baseCost = UnitDefs[unitDefID].metalCost or 0
 					local requiredMetal = baseCost * MAP_TRAVERSE_FUEL_RATIO * movedDistance / MAP_REFERENCE_DISTANCE
-					if requiredMetal > 0 and spUseTeamResource(teamID, "metal", requiredMetal) then
-						SetStalled(unitID, false)
+					if requiredMetal > 0 then
+						local paid = 0
+						local currentMetal = spGetTeamResources(teamID, "metal") or 0
+						local immediatePayment = math.min(currentMetal, requiredMetal)
+						if immediatePayment > 0 and spUseTeamResource(teamID, "metal", immediatePayment) then
+							paid = immediatePayment
+						end
+						if paid >= requiredMetal then
+							SetStalled(unitID, false)
+						else
+							SetStalled(unitID, true)
+							AddMetalDebt(data.allyTeamID, requiredMetal - paid)
+						end
 					else
-						SetStalled(unitID, true)
+						SetStalled(unitID, false)
 					end
 				else
 					SetStalled(unitID, false)
