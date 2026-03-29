@@ -39,8 +39,24 @@ local VOTE_STAGE_KEY = PREFIX .. "_vote_stage_seq"
 local VOTE_SLOT_KEY = PREFIX .. "_vote_slot"
 
 local gaiaAllyTeam
+local BAD_TIME_CARD_ID = 315
+local BAD_TIME_DURATION_FRAMES = 10 * 60 * constants.GAME_SPEED
+local BAD_TIME_EXTRA_CARD_COUNT = 2
+local BAD_TIME_TEMP_POOL = {
+	301,
+	302,
+	303,
+	304,
+	305,
+	306,
+	308,
+	309,
+	311,
+	314,
+}
 
 local appliedByAllyTeam = {}
+local badTimeAnnouncementByAllyTeam = {}
 local stage = {
 	seq = 0,
 	active = false,
@@ -52,6 +68,7 @@ local stage = {
 }
 
 local ApplyEffect = {}
+local ApplyCardToAllyTeam
 
 local modOptions = spGetModOptions() or {}
 
@@ -181,16 +198,32 @@ local function AnnounceResolvedDrafts()
 	end
 
 	local count = 0
+	local rawAllyTeams = spGetAllyTeamList() or {}
+	for i = 1, #rawAllyTeams do
+		local allyTeamID = rawAllyTeams[i]
+		spSetGameRulesParam(PREFIX .. "_announce_" .. allyTeamID .. "_card", 0, PUBLIC_VISIBLE)
+		spSetGameRulesParam(PREFIX .. "_announce_" .. allyTeamID .. "_extra_count", 0, PUBLIC_VISIBLE)
+		spSetGameRulesParam(PREFIX .. "_announce_" .. allyTeamID .. "_extra_1", 0, PUBLIC_VISIBLE)
+		spSetGameRulesParam(PREFIX .. "_announce_" .. allyTeamID .. "_extra_2", 0, PUBLIC_VISIBLE)
+	end
 	for allyTeamID, draft in pairs(stage.drafts) do
 		if draft.resolved and draft.winningCardID then
 			count = count + 1
 			spSetGameRulesParam(PREFIX .. "_announce_" .. allyTeamID .. "_card", draft.winningCardID, PUBLIC_VISIBLE)
+			local extra = badTimeAnnouncementByAllyTeam[allyTeamID]
+			if extra and extra.cardIDs and draft.winningCardID == BAD_TIME_CARD_ID then
+				spSetGameRulesParam(PREFIX .. "_announce_" .. allyTeamID .. "_extra_count", #extra.cardIDs, PUBLIC_VISIBLE)
+				for i = 1, #extra.cardIDs do
+					spSetGameRulesParam(PREFIX .. "_announce_" .. allyTeamID .. "_extra_" .. i, extra.cardIDs[i], PUBLIC_VISIBLE)
+				end
+			end
 		end
 	end
 	if count > 0 then
 		spSetGameRulesParam(PREFIX .. "_announce_count", count, PUBLIC_VISIBLE)
 		spSetGameRulesParam(PREFIX .. "_announce_seq", spGetGameFrame(), PUBLIC_VISIBLE)
 	end
+	badTimeAnnouncementByAllyTeam = {}
 end
 
 local function ClearPlayerVote(playerID)
@@ -214,9 +247,22 @@ end
 local function PublishAppliedHistory(allyTeamID)
 	local appliedState = appliedByAllyTeam[allyTeamID]
 	local teamList = spGetTeamList(allyTeamID)
-	local appliedCount = #appliedState.history
-	local lastApplied = appliedCount > 0 and appliedState.history[appliedCount].cardID or 0
-	local lastFrame = appliedCount > 0 and appliedState.history[appliedCount].frame or 0
+	local activeCounts = {}
+	local activeOrder = {}
+
+	for i = 1, #appliedState.history do
+		local entry = appliedState.history[i]
+		local remaining = (appliedState.countByCardID[entry.cardID] or 0) - (activeCounts[entry.cardID] or 0)
+		if remaining > 0 then
+			activeCounts[entry.cardID] = (activeCounts[entry.cardID] or 0) + 1
+			activeOrder[#activeOrder + 1] = entry.cardID
+		end
+	end
+
+	local appliedCount = #activeOrder
+	local lastHistoryEntry = appliedState.history[#appliedState.history]
+	local lastApplied = lastHistoryEntry and lastHistoryEntry.cardID or 0
+	local lastFrame = lastHistoryEntry and lastHistoryEntry.frame or 0
 
 	for i = 1, #teamList do
 		local teamID = teamList[i]
@@ -224,7 +270,10 @@ local function PublishAppliedHistory(allyTeamID)
 		spSetTeamRulesParam(teamID, PREFIX .. "_last_applied_id", lastApplied, ALLIED_VISIBLE)
 		spSetTeamRulesParam(teamID, PREFIX .. "_last_applied_frame", lastFrame, ALLIED_VISIBLE)
 		for historyIndex = 1, appliedCount do
-			spSetTeamRulesParam(teamID, PREFIX .. "_applied_" .. historyIndex .. "_id", appliedState.history[historyIndex].cardID, ALLIED_VISIBLE)
+			spSetTeamRulesParam(teamID, PREFIX .. "_applied_" .. historyIndex .. "_id", activeOrder[historyIndex], ALLIED_VISIBLE)
+		end
+		for historyIndex = appliedCount + 1, #appliedState.history do
+			spSetTeamRulesParam(teamID, PREFIX .. "_applied_" .. historyIndex .. "_id", nil, ALLIED_VISIBLE)
 		end
 	end
 end
@@ -269,6 +318,7 @@ local function PublishAllStates()
 		appliedByAllyTeam[allyTeamID] = appliedByAllyTeam[allyTeamID] or {
 			countByCardID = {},
 			history = {},
+			temporary = {},
 		}
 		PublishStageForAllyTeam(allyTeamID)
 		PublishAppliedHistory(allyTeamID)
@@ -306,7 +356,89 @@ function ApplyEffect.record_only(allyTeamID, cardDef, context)
 	return true
 end
 
-local function ApplyCardToAllyTeam(allyTeamID, cardID)
+local function RegisterAppliedCard(allyTeamID, cardID, options)
+	local appliedState = appliedByAllyTeam[allyTeamID]
+	if not appliedState then
+		return
+	end
+
+	options = options or {}
+	local frame = options.frame or spGetGameFrame()
+	appliedState.countByCardID[cardID] = (appliedState.countByCardID[cardID] or 0) + 1
+	appliedState.history[#appliedState.history + 1] = {
+		cardID = cardID,
+		frame = frame,
+		stageSeq = options.stageSeq or stage.seq,
+		temporary = options.temporary or false,
+		expiresFrame = options.expiresFrame,
+		sourceCardID = options.sourceCardID,
+	}
+	if options.temporary then
+		appliedState.temporary = appliedState.temporary or {}
+		appliedState.temporary[#appliedState.temporary + 1] = {
+			cardID = cardID,
+			expiresFrame = options.expiresFrame or frame,
+		}
+	end
+	PublishAppliedHistory(allyTeamID)
+end
+
+function ApplyEffect.bad_time(allyTeamID, cardDef, context)
+	local appliedState = appliedByAllyTeam[allyTeamID]
+	if not appliedState then
+		return false
+	end
+
+	local chosen = {}
+	local chosenSet = {
+		[BAD_TIME_CARD_ID] = true,
+	}
+	local shuffled = ShuffleCopy(BAD_TIME_TEMP_POOL)
+	for i = 1, #shuffled do
+		local candidateID = shuffled[i]
+		if not chosenSet[candidateID] and not appliedState.countByCardID[candidateID] then
+			chosen[#chosen + 1] = candidateID
+			chosenSet[candidateID] = true
+			if #chosen >= BAD_TIME_EXTRA_CARD_COUNT then
+				break
+			end
+		end
+	end
+	if #chosen < BAD_TIME_EXTRA_CARD_COUNT then
+		for i = 1, #shuffled do
+			local candidateID = shuffled[i]
+			if not chosenSet[candidateID] then
+				chosen[#chosen + 1] = candidateID
+				chosenSet[candidateID] = true
+				if #chosen >= BAD_TIME_EXTRA_CARD_COUNT then
+					break
+				end
+			end
+		end
+	end
+	if #chosen == 0 then
+		return true
+	end
+
+	local frame = context.frame or spGetGameFrame()
+	local expiresFrame = frame + BAD_TIME_DURATION_FRAMES
+	for i = 1, #chosen do
+		ApplyCardToAllyTeam(allyTeamID, chosen[i], {
+			frame = frame,
+			stageSeq = context.stageSeq,
+			temporary = true,
+			expiresFrame = expiresFrame,
+			sourceCardID = BAD_TIME_CARD_ID,
+		})
+	end
+
+	badTimeAnnouncementByAllyTeam[allyTeamID] = {
+		cardIDs = chosen,
+	}
+	return true
+end
+
+ApplyCardToAllyTeam = function(allyTeamID, cardID, options)
 	local appliedState = appliedByAllyTeam[allyTeamID]
 	local cardDef = cardData.byID[cardID]
 	if not (appliedState and cardDef) then
@@ -314,22 +446,27 @@ local function ApplyCardToAllyTeam(allyTeamID, cardID)
 	end
 
 	local effectFunc = ApplyEffect[cardDef.effectType] or ApplyEffect.record_only
+	options = options or {}
+	local frame = options.frame or spGetGameFrame()
 
 	local ok = effectFunc(allyTeamID, cardDef, {
-		stageSeq = stage.seq,
-		frame = spGetGameFrame(),
+		stageSeq = options.stageSeq or stage.seq,
+		frame = frame,
+		temporary = options.temporary,
+		expiresFrame = options.expiresFrame,
+		sourceCardID = options.sourceCardID,
 	})
 	if not ok then
 		return false
 	end
 
-	appliedState.countByCardID[cardID] = (appliedState.countByCardID[cardID] or 0) + 1
-	appliedState.history[#appliedState.history + 1] = {
-		cardID = cardID,
-		frame = spGetGameFrame(),
-		stageSeq = stage.seq,
-	}
-	PublishAppliedHistory(allyTeamID)
+	RegisterAppliedCard(allyTeamID, cardID, {
+		frame = frame,
+		stageSeq = options.stageSeq or stage.seq,
+		temporary = options.temporary,
+		expiresFrame = options.expiresFrame,
+		sourceCardID = options.sourceCardID,
+	})
 	return true
 end
 
@@ -344,9 +481,35 @@ local function EnsureAppliedState(allyTeamID)
 	appliedByAllyTeam[allyTeamID] = {
 		countByCardID = {},
 		history = {},
+		temporary = {},
 	}
 	PublishAppliedHistory(allyTeamID)
 	return true
+end
+
+local function ExpireTemporaryCards(frame)
+	for allyTeamID, appliedState in pairs(appliedByAllyTeam) do
+		local temporary = appliedState.temporary
+		local changed = false
+		if temporary then
+			for i = #temporary, 1, -1 do
+				local entry = temporary[i]
+				if frame >= (entry.expiresFrame or 0) then
+					local currentCount = appliedState.countByCardID[entry.cardID] or 0
+					if currentCount > 1 then
+						appliedState.countByCardID[entry.cardID] = currentCount - 1
+					else
+						appliedState.countByCardID[entry.cardID] = nil
+					end
+					table.remove(temporary, i)
+					changed = true
+				end
+			end
+		end
+		if changed then
+			PublishAppliedHistory(allyTeamID)
+		end
+	end
 end
 
 local function TryGrantCard(playerID, targetAllyTeamID, cardID)
@@ -540,6 +703,7 @@ function gadget:RecvLuaMsg(message, playerID)
 end
 
 function gadget:GameFrame(frame)
+	ExpireTemporaryCards(frame)
 	if stage.active then
 		if frame >= stage.closeFrame then
 			for allyTeamID in pairs(stage.drafts) do
@@ -562,6 +726,7 @@ function gadget:Initialize()
 		appliedByAllyTeam[allyTeams[i]] = {
 			countByCardID = {},
 			history = {},
+			temporary = {},
 		}
 	end
 

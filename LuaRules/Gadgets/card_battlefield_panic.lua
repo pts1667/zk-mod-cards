@@ -85,8 +85,8 @@ local function UpdateCardActivation()
 		return
 	end
 	for _, allyTeamID in ipairs(spGetAllyTeamList() or {}) do
-		if allyTeamID ~= gaiaAllyTeam and not allyTeamActive[allyTeamID] and GG.ZKCards.HasAppliedCard(allyTeamID, CARD_ID) then
-			allyTeamActive[allyTeamID] = true
+		if allyTeamID ~= gaiaAllyTeam then
+			allyTeamActive[allyTeamID] = GG.ZKCards.HasAppliedCard(allyTeamID, CARD_ID) or false
 		end
 	end
 end

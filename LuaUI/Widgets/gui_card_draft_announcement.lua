@@ -73,7 +73,22 @@ local function RefreshFromRulesParams()
 		local cardID = Spring.GetGameRulesParam(PREFIX .. "_announce_" .. allyTeamID .. "_card")
 		local cardDef = cardID and cardData.byID[cardID]
 		if cardDef then
-			lines[#lines + 1] = string.format("%s picked %s", GetAllyTeamLabel(allyTeamID), cardDef.name)
+			local line = string.format("%s picked %s", GetAllyTeamLabel(allyTeamID), cardDef.name)
+			local extraCount = Spring.GetGameRulesParam(PREFIX .. "_announce_" .. allyTeamID .. "_extra_count") or 0
+			if extraCount > 0 then
+				local extraNames = {}
+				for extraIndex = 1, extraCount do
+					local extraCardID = Spring.GetGameRulesParam(PREFIX .. "_announce_" .. allyTeamID .. "_extra_" .. extraIndex)
+					local extraCardDef = extraCardID and cardData.byID[extraCardID]
+					if extraCardDef then
+						extraNames[#extraNames + 1] = extraCardDef.name
+					end
+				end
+				if #extraNames > 0 then
+					line = string.format("%s (%s)", line, table.concat(extraNames, ", "))
+				end
+			end
+			lines[#lines + 1] = line
 		end
 	end
 

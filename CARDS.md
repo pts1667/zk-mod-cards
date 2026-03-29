@@ -78,7 +78,7 @@ Category: Neutral
 
 ### Nuclear Wildcard
 
-Trinity will be stockpiled for free and takes only 30 seconds to stockpile.
+Trinity costs 50% less, its missiles stockpile for free, and each stockpile takes only 30 seconds.
 The target position when launched is completely random.
 Associated gadget: `LuaRules/Gadgets/card_nuclear_wildcard.lua`
 Category: Neutral
@@ -222,7 +222,7 @@ Category: Good
 
 ### Air Dominance
 
-Air units move at only 20% move speed, but rearm in the air and have +200% Max HP
+Air units move at 50% move speed, but rearm in the air and have +200% Max HP
 Associated gadget: `LuaRules/Gadgets/card_air_dominance.lua`
 Category: Good
 
@@ -267,4 +267,28 @@ Doesn't apply for units with multiple weapons such as Paladin and Dante.
 Associated gadget: `LuaRules/Gadgets/card_point_defense.lua`
 Category: Neutral
 
-## Incomplete
+### Ambush
+
+When units decloak, they gain +100% move speed and +50% reload speed for 5 seconds.
+Cooldown is 60 seconds.
+Associated gadget: `LuaRules/Gadgets/card_ambush.lua`
+Category: Good
+
+### No Cloak
+
+Units can no longer cloak.
+Associated gadget: `LuaRules/Gadgets/card_no_cloak.lua`
+Category: Bad
+
+### Brawl
+
+Melee units (<300 range) get +500% Max HP, but all other units have halved Max HP.
+Associated gadget: `LuaRules/Gadgets/card_brawl.lua`
+Category: Neutral
+
+### Bad Time
+ 
+Gain two other random bad cards now, but they are removed in 10 minutes.
+(Implementation note: ensure that the player(s) on the team are informed of what bad cards were chosen)
+Associated gadget: `LuaRules/Gadgets/game_card_draft.lua`
+Category: Bad

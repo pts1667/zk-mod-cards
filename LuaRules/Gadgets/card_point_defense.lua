@@ -27,12 +27,16 @@ local spGetTeamInfo = Spring.GetTeamInfo
 local spGetTeamList = Spring.GetTeamList
 local spGetTeamUnits = Spring.GetTeamUnits
 local spGetUnitDefID = Spring.GetUnitDefID
+local spGetUnitPosition = Spring.GetUnitPosition
 local spGetUnitRulesParam = Spring.GetUnitRulesParam
 local spGetUnitTeam = Spring.GetUnitTeam
+local spGetUnitWeaponTarget = Spring.GetUnitWeaponTarget
 
 local gaiaAllyTeam
 local allyTeamActive = {}
 local trackedUnits = {}
+local TARGET_TYPE_UNIT = 1
+local TARGET_TYPE_POS = 2
 local helperNamePatterns = {
 	"^FAKE",
 	"^BOGUS",
@@ -48,17 +52,20 @@ local excludedUnitDefs = {
 	assaultcruiser = true,
 	gunshipkrow = true,
 	jumpaa = true,
+	mahlazer = true,
 	raveparty = true,
 	shieldfelon = true,
 	shipaa = true,
 	shipassault = true,
 	shipcarrier = true,
 	slicer = true,
+	staticnuke = true,
 	striderbantha = true,
 	striderdante = true,
 	striderdetriment = true,
 	tankheavyassault = true,
 	turretheavy = true,
+	zenith = true,
 }
 local forcedMainWeaponByDefName = {
 }
@@ -160,6 +167,35 @@ local function GetWeaponHoldFrames(weaponDef)
 	return math.ceil(holdFrames)
 end
 
+local function GetWeaponVolleyFrames(weaponDef)
+	if not weaponDef then
+		return 0
+	end
+
+	local customParams = weaponDef.customParams or weaponDef.customparams
+	local salvoSize = tonumber((customParams and customParams.script_burst) or weaponDef.salvoSize) or 1
+	local salvoDelay = tonumber(weaponDef.salvoDelay) or 0
+	if salvoSize <= 1 or salvoDelay <= 0 then
+		return 0
+	end
+
+	local volleyFrames = (salvoSize - 1) * salvoDelay * Game.gameSpeed
+	if not IsFiniteNumber(volleyFrames) or volleyFrames <= 0 then
+		return 0
+	end
+	return math.ceil(volleyFrames)
+end
+
+local function GetWeaponCycleData(weaponDef)
+	if not weaponDef then
+		return 0, 0, false
+	end
+
+	local customParams = weaponDef.customParams or weaponDef.customparams
+	local salvoSize = tonumber((customParams and customParams.script_burst) or weaponDef.salvoSize) or 1
+	return GetWeaponHoldFrames(weaponDef), GetWeaponVolleyFrames(weaponDef), (salvoSize > 1)
+end
+
 local function UpdateCardActivation()
 	if not (GG.ZKCards and GG.ZKCards.HasAppliedCard) then
 		return
@@ -185,11 +221,15 @@ local function GetMainWeaponData(unitDefID)
 		local weaponDefID = unitDef.weapons[forcedWeaponNum].weaponDef
 		local weaponDef = WeaponDefs[weaponDefID]
 		if weaponDef and (weaponDef.range or 0) > 0 and (weaponDef.reload or 0) > 0 then
+			local holdFrames, volleyFrames, useBurstEnd = GetWeaponCycleData(weaponDef)
 			return {
 				mainWeaponNum = forcedWeaponNum,
 				mainWeaponDefID = weaponDefID,
 				baseReload = weaponDef.reload,
-				holdFrames = GetWeaponHoldFrames(weaponDef),
+				baseRange = weaponDef.range,
+				holdFrames = holdFrames,
+				volleyFrames = volleyFrames,
+				useBurstEnd = useBurstEnd,
 			}
 		end
 	end
@@ -217,19 +257,29 @@ local function GetMainWeaponData(unitDefID)
 	end
 
 	if bestCandidate then
-			return {
-				mainWeaponNum = bestCandidate.mainWeaponNum,
-				mainWeaponDefID = unitDef.weapons[bestCandidate.mainWeaponNum].weaponDef,
-				baseReload = bestCandidate.baseReload,
-				holdFrames = GetWeaponHoldFrames(WeaponDefs[unitDef.weapons[bestCandidate.mainWeaponNum].weaponDef]),
-			}
+		local weaponDef = WeaponDefs[unitDef.weapons[bestCandidate.mainWeaponNum].weaponDef]
+		local holdFrames, volleyFrames, useBurstEnd = GetWeaponCycleData(weaponDef)
+		return {
+			mainWeaponNum = bestCandidate.mainWeaponNum,
+			mainWeaponDefID = unitDef.weapons[bestCandidate.mainWeaponNum].weaponDef,
+			baseReload = bestCandidate.baseReload,
+			baseRange = weaponDef.range,
+			holdFrames = holdFrames,
+			volleyFrames = volleyFrames,
+			useBurstEnd = useBurstEnd,
+		}
 	end
 	if bestFallback then
+		local weaponDef = WeaponDefs[unitDef.weapons[bestFallback.mainWeaponNum].weaponDef]
+		local holdFrames, volleyFrames, useBurstEnd = GetWeaponCycleData(weaponDef)
 		return {
 			mainWeaponNum = bestFallback.mainWeaponNum,
 			mainWeaponDefID = unitDef.weapons[bestFallback.mainWeaponNum].weaponDef,
 			baseReload = bestFallback.baseReload,
-			holdFrames = GetWeaponHoldFrames(WeaponDefs[unitDef.weapons[bestFallback.mainWeaponNum].weaponDef]),
+			baseRange = weaponDef.range,
+			holdFrames = holdFrames,
+			volleyFrames = volleyFrames,
+			useBurstEnd = useBurstEnd,
 		}
 	end
 
@@ -248,7 +298,10 @@ local function SweepAllyTeam(allyTeamID)
 						mainWeaponNum = weaponData.mainWeaponNum,
 						mainWeaponDefID = weaponData.mainWeaponDefID,
 						baseReload = weaponData.baseReload,
+						baseRange = weaponData.baseRange,
 						holdFrames = weaponData.holdFrames or 0,
+						volleyFrames = weaponData.volleyFrames or 0,
+						useBurstEnd = weaponData.useBurstEnd or false,
 						appliedReloadMult = false,
 						lastShotFrame = false,
 					}
@@ -289,6 +342,38 @@ local function RestoreUnit(unitID, data)
 	data.lastShotFrame = false
 end
 
+local function GetCurrentTargetDistanceFrac(unitID, weaponNum, baseRange)
+	if not unitID or not weaponNum or not IsFiniteNumber(baseRange) or baseRange <= 0 then
+		return nil
+	end
+
+	local ux, _, uz = spGetUnitPosition(unitID)
+	if not ux or not uz then
+		return nil
+	end
+
+	local targetType, _, targetData = spGetUnitWeaponTarget(unitID, weaponNum)
+	local tx, tz
+	if targetType == TARGET_TYPE_UNIT then
+		tx, _, tz = spGetUnitPosition(targetData)
+	elseif targetType == TARGET_TYPE_POS and type(targetData) == "table" then
+		tx, tz = targetData[1], targetData[3]
+	end
+
+	if not tx or not tz then
+		return nil
+	end
+
+	local dx = tx - ux
+	local dz = tz - uz
+	local distance = math.sqrt(dx * dx + dz * dz)
+	if not IsFiniteNumber(distance) then
+		return nil
+	end
+
+	return math.min(math.max(distance / baseRange, RANGE_FLOOR), 1)
+end
+
 local function ApplyUnitUpdate(unitID, data, gameFrame)
 	local targetReloadSeconds = FAST_RELOAD_FRAMES / Game.gameSpeed
 	local fallbackReloadSeconds = data.baseReload / GetExternalReloadMult(unitID, data.appliedReloadMult)
@@ -300,7 +385,14 @@ local function ApplyUnitUpdate(unitID, data, gameFrame)
 	if not IsFiniteNumber(rampReloadSeconds) or rampReloadSeconds <= 0 then
 		rampReloadSeconds = fallbackReloadSeconds * RELOAD_TIME_MULT
 	end
-	local reloadMult = math.max(mainReloadSeconds / targetReloadSeconds, 1)
+
+	local targetDistanceFrac = GetCurrentTargetDistanceFrac(unitID, data.mainWeaponNum, data.baseRange)
+	local desiredReloadSeconds = targetReloadSeconds
+	if targetDistanceFrac then
+		desiredReloadSeconds = math.max(targetReloadSeconds, rampReloadSeconds * targetDistanceFrac)
+	end
+
+	local reloadMult = mainReloadSeconds / desiredReloadSeconds
 	if not IsFiniteNumber(reloadMult) or reloadMult <= 0 then
 		reloadMult = 1
 	end
@@ -343,11 +435,22 @@ local function TrackUnit(unitID, unitDefID)
 			mainWeaponNum = weaponData.mainWeaponNum,
 			mainWeaponDefID = weaponData.mainWeaponDefID,
 			baseReload = weaponData.baseReload,
+			baseRange = weaponData.baseRange,
 			holdFrames = weaponData.holdFrames or 0,
+			volleyFrames = weaponData.volleyFrames or 0,
+			useBurstEnd = weaponData.useBurstEnd or false,
 			appliedReloadMult = false,
 			lastShotFrame = false,
 		}
 	end
+end
+
+local function MarkWeaponCycle(unitID, data, frame)
+	local triggerWindowFrames = math.max(data.holdFrames or 0, data.volleyFrames or 0)
+	if data.lastShotFrame and frame <= data.lastShotFrame + triggerWindowFrames then
+		return
+	end
+	data.lastShotFrame = frame
 end
 
 function gadget:ScriptFireWeapon(unitID, unitDefID, weaponNum)
@@ -362,7 +465,25 @@ function gadget:ScriptFireWeapon(unitID, unitDefID, weaponNum)
 		return
 	end
 
-	data.lastShotFrame = spGetGameFrame()
+	MarkWeaponCycle(unitID, data, spGetGameFrame())
+end
+
+function gadget:ScriptEndBurst(unitID, unitDefID, weaponNum)
+	local data = trackedUnits[unitID]
+	if not data or unitDefID ~= data.unitDefID or weaponNum ~= data.mainWeaponNum or not data.useBurstEnd then
+		return
+	end
+
+	local teamID = spGetUnitTeam(unitID)
+	local allyTeamID = GetTeamAllyTeam(teamID)
+	if not allyTeamActive[allyTeamID] then
+		return
+	end
+
+	local frame = spGetGameFrame()
+	if not data.lastShotFrame or frame > data.lastShotFrame then
+		data.lastShotFrame = frame
+	end
 end
 
 function gadget:UnitCreated(unitID, unitDefID)

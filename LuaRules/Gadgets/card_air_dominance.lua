@@ -15,7 +15,7 @@ end
 local CARD_ID = 213
 local UPDATE_FRAMES = 15
 local EFFECT_KEY_PREFIX = "zk_cards_air_dominance_"
-local MOVE_MULT = 0.2
+local MOVE_MULT = 0.5
 local HEALTH_MULT = 3.0
 local INLOS_ACCESS = {inlos = true}
 local CMD_REARM = Spring.Utilities.CMD.REARM

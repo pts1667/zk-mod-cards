@@ -141,9 +141,11 @@ local function UpdateCardActivation()
 		return
 	end
 	for _, allyTeamID in ipairs(spGetAllyTeamList() or {}) do
-		if allyTeamID ~= gaiaAllyTeam and not allyTeamActive[allyTeamID] and GG.ZKCards.HasAppliedCard(allyTeamID, CARD_ID) then
-			allyTeamActive[allyTeamID] = true
-			SweepAllyTeam(allyTeamID)
+		if allyTeamID ~= gaiaAllyTeam then
+			allyTeamActive[allyTeamID] = GG.ZKCards.HasAppliedCard(allyTeamID, CARD_ID) or false
+			if allyTeamActive[allyTeamID] then
+				SweepAllyTeam(allyTeamID)
+			end
 		end
 	end
 end
@@ -159,6 +161,10 @@ local function UpdateUnits(frame)
 			local health, maxHealth, _, _, buildProgress = spGetUnitHealth(unitID)
 			if not health or not maxHealth then
 				UntrackUnit(unitID)
+			elseif not allyTeamActive[data.allyTeamID] then
+				if data.sleepEndFrame then
+					ClearSleepState(unitID)
+				end
 			elseif data.sleepEndFrame then
 				if frame >= data.sleepEndFrame then
 					ClearSleepState(unitID)

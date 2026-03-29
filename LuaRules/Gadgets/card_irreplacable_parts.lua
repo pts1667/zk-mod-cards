@@ -94,8 +94,8 @@ local function UpdateCardActivation()
 	local allyTeams = GetLivingAllyTeams()
 	for i = 1, #allyTeams do
 		local allyTeamID = allyTeams[i]
-		if not allyTeamActive[allyTeamID] and GG.ZKCards.HasAppliedCard(allyTeamID, CARD_ID) then
-			allyTeamActive[allyTeamID] = true
+		allyTeamActive[allyTeamID] = GG.ZKCards.HasAppliedCard(allyTeamID, CARD_ID) or false
+		if allyTeamActive[allyTeamID] then
 			SweepUnitsForAllyTeam(allyTeamID)
 		end
 	end
