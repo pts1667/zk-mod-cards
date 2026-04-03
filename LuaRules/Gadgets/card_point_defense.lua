@@ -514,6 +514,8 @@ function gadget:GameFrame(frame)
 		return
 	end
 
+	local unitsToRemove
+
 	UpdateCardActivation()
 	if frame % SWEEP_FRAMES == 0 then
 		for allyTeamID in pairs(allyTeamActive) do
@@ -526,7 +528,8 @@ function gadget:GameFrame(frame)
 		local teamID = spGetUnitTeam(unitID)
 		if not unitDefID or not teamID or unitDefID ~= data.unitDefID then
 			RemoveUnitEffect(unitID)
-			trackedUnits[unitID] = nil
+			unitsToRemove = unitsToRemove or {}
+			unitsToRemove[#unitsToRemove + 1] = unitID
 		else
 			local allyTeamID = GetTeamAllyTeam(teamID)
 			if allyTeamActive[allyTeamID] then
@@ -534,6 +537,12 @@ function gadget:GameFrame(frame)
 			else
 				RestoreUnit(unitID, data)
 			end
+		end
+	end
+
+	if unitsToRemove then
+		for i = 1, #unitsToRemove do
+			trackedUnits[unitsToRemove[i]] = nil
 		end
 	end
 end
